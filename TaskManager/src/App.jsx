@@ -141,7 +141,7 @@ function App() {
                     fontSize: '1rem', 
                     fontWeight: 'bold',
                     borderRadius: 3,
-                    textTransform: 'none', // Button text capital nahi hoga
+                    textTransform: 'none', 
                     boxShadow: '0 10px 20px rgba(25, 118, 210, 0.3)',
                     '&:hover': {
                         transform: 'translateY(-2px)',
