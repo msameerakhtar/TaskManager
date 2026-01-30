@@ -1,19 +1,66 @@
 import React from 'react';
+import { createBrowserRouter, RouterProvider, Navigate } from 'react-router-dom';
+import { CssBaseline } from '@mui/material';
+import Login from './components/Login';
+import Signup from './components/Signup';
 import TaskList from './components/TaskList';
-import { CssBaseline, Container } from '@mui/material';
+import ProtectedRoute from './components/ProtectedRoute';
+
+const router = createBrowserRouter([
+  {
+    path: "/",
+    element: <Navigate to="/login" replace />,
+  },
+  {
+    path: "/login",
+    element: <Login />,
+  },
+  {
+    path: "/signup",
+    element: <Signup />,
+  },
+  {
+    path: "/tasks",
+    element: (
+      <ProtectedRoute>
+        <TaskList />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "*",
+    element: <Navigate to="/login" replace />,
+  }
+]);
 
 const App = () => {
   return (
     <>
-      <CssBaseline /> 
-      <Container maxWidth="lg" sx={{ mt: 4 }}> 
-        <TaskList />
-      </Container>
+      <CssBaseline />
+      <RouterProvider router={router} />
     </>
   );
-}
+};
 
 export default App;
+
+
+// import React from 'react';
+// import TaskList from './components/TaskList';
+// import { CssBaseline, Container } from '@mui/material';
+
+// const App = () => {
+//   return (
+//     <>
+//       <CssBaseline /> 
+//       <Container maxWidth="lg" sx={{ mt: 4 }}> 
+//         <TaskList />
+//       </Container>
+//     </>
+//   );
+// }
+
+// export default App;
 
 
 

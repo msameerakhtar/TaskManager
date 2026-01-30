@@ -16,7 +16,7 @@ const TaskList = () => {
           method: 'GET',
           url: 'https://task-manager-api3.p.rapidapi.com/',
           headers: {
-            'x-rapidapi-key': 'c2b5fe3070msh7ca68c6210a1bb1p1f7554jsn29ef05eade98',
+            'x-rapidapi-key': 'f004a4845bmshcbfd552bc2bec21p11aa17jsne6c8b069e0b5',
             'x-rapidapi-host': 'task-manager-api3.p.rapidapi.com'
           }
         });
