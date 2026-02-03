@@ -1,10 +1,10 @@
 import React from 'react';
 import { createBrowserRouter, RouterProvider, Navigate } from 'react-router-dom';
 import { CssBaseline } from '@mui/material';
-import Login from './components/Login';
-import Signup from './components/Signup';
-import TaskList from './components/TaskList';
-import ProtectedRoute from './components/ProtectedRoute';
+import Login from './features/auth/Login';
+import Signup from './features/auth/Signup';
+import TaskList from './features/tasks/TaskList';
+import ProtectedRoute from './routes/ProtectedRoute';
 
 const router = createBrowserRouter([
   {
