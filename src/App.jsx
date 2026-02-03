@@ -1,6 +1,7 @@
 import React from 'react';
 import { createBrowserRouter, RouterProvider, Navigate } from 'react-router-dom';
 import { CssBaseline } from '@mui/material';
+import Home from './pages/Home';
 import Login from './features/auth/Login';
 import Signup from './features/auth/Signup';
 import TaskList from './features/tasks/TaskList';
@@ -9,7 +10,7 @@ import ProtectedRoute from './routes/ProtectedRoute';
 const router = createBrowserRouter([
   {
     path: "/",
-    element: <Navigate to="/login" replace />,
+    element: <Home />, 
   },
   {
     path: "/login",
@@ -29,7 +30,7 @@ const router = createBrowserRouter([
   },
   {
     path: "*",
-    element: <Navigate to="/login" replace />,
+    element: <Navigate to="/" replace />,
   }
 ]);
 
