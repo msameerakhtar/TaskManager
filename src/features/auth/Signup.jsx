@@ -1,13 +1,32 @@
-import React from 'react';
-import { TextField, Button, Typography, Paper, Container, Box, Link } from '@mui/material';
+import React, { useState } from 'react';
+import { TextField, Button, Typography, Paper, Container, Box, Link, Alert } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
+import { supabase } from '../../supabaseClient';
 
 const Signup = () => {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
-  const handleSignup = (e) => {
+
+  const handleSignup = async (e) => {
     e.preventDefault();
-    alert("Success!");
-    navigate('/login');
+    setLoading(true);
+    setError('');
+
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+    });
+
+    if (error) {
+      setError(error.message);
+      setLoading(false);
+    } else {
+      alert("Success! You can now login.");
+      navigate('/login');
+    }
   };
 
   return (
@@ -15,11 +34,13 @@ const Signup = () => {
       <Container maxWidth="xs">
         <Paper sx={{ p: 4, textAlign: 'center', borderRadius: 4 }}>
           <Typography variant="h5" gutterBottom fontWeight="bold">Register</Typography>
+          {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
           <form onSubmit={handleSignup}>
-            <TextField fullWidth label="Full Name" margin="normal" required />
-            <TextField fullWidth label="Email" margin="normal" type="email" required />
-            <TextField fullWidth label="Password" type="password" margin="normal" required />
-            <Button fullWidth variant="contained" color="success" type="submit" sx={{ mt: 2, fontWeight: 'bold' }}>Register</Button>
+            <TextField fullWidth label="Email" margin="normal" type="email" required onChange={(e) => setEmail(e.target.value)} />
+            <TextField fullWidth label="Password" type="password" margin="normal" required onChange={(e) => setPassword(e.target.value)} />
+            <Button fullWidth variant="contained" color="success" type="submit" disabled={loading} sx={{ mt: 2, fontWeight: 'bold' }}>
+              {loading ? 'Processing...' : 'Register'}
+            </Button>
           </form>
           <Typography mt={2}>Already a member? <Link href="/login">Login</Link></Typography>
         </Paper>

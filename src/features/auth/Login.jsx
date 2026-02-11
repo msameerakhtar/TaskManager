@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { TextField, Button, Typography, Paper, Container, Box, Link, Alert, CircularProgress } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
+import { supabase } from '../../supabaseClient';
+
 
 const Login = () => {
-  const [username, setUsername] = useState(''); 
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -15,20 +16,17 @@ const Login = () => {
     setError('');
     setLoading(true);
 
-    try {
-      const response = await axios.post('https://dummyjson.com/auth/login', {
-        username: username,
-        password: password,
-      });
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
 
-      if (response.data && response.data.accessToken) {
-        localStorage.setItem('userToken', response.data.accessToken); 
-        navigate('/tasks', { replace: true });
-      }
-    } catch (err) {
-      setError('Invalid credentials!');
-    } finally {
+    if (error) {
+      setError(error.message);
       setLoading(false);
+    } else if (data.session) {
+      localStorage.setItem('userToken', data.session.access_token); 
+      navigate('/tasks', { replace: true });
     }
   };
 
@@ -37,38 +35,14 @@ const Login = () => {
       <Container maxWidth="xs">
         <Paper elevation={15} sx={{ p: 4, borderRadius: 4, bgcolor: 'rgba(255, 255, 255, 0.85)', backdropFilter: 'blur(8px)', textAlign: 'center' }}>
           <Typography variant="h4" fontWeight="800" color="#1a237e">Secure Login</Typography>
-          
           {error && <Alert severity="error" sx={{ mb: 2, mt: 2 }}>{error}</Alert>}
-          
           <form onSubmit={handleLogin} autoComplete="off">
-            <TextField 
-              fullWidth 
-              label="Username" 
-              margin="normal" 
-              value={username} 
-              onChange={(e) => setUsername(e.target.value)} 
-              inputProps={{ autoComplete: 'off' }}
-            />
-            <TextField 
-              fullWidth 
-              label="Password" 
-              type="password" 
-              margin="normal" 
-              value={password} 
-              onChange={(e) => setPassword(e.target.value)} 
-              inputProps={{ autoComplete: 'new-password' }}
-            />
-            <Button 
-              fullWidth 
-              variant="contained" 
-              type="submit" 
-              disabled={loading} 
-              sx={{ mt: 3, py: 1.5, bgcolor: '#1a237e' }}
-            >
-              {loading ? <CircularProgress size={24} color="inherit" /> : 'Sign In with Token'}
+            <TextField fullWidth label="Email" margin="normal" value={email} onChange={(e) => setEmail(e.target.value)} />
+            <TextField fullWidth label="Password" type="password" margin="normal" value={password} onChange={(e) => setPassword(e.target.value)} />
+            <Button fullWidth variant="contained" type="submit" disabled={loading} sx={{ mt: 3, py: 1.5, bgcolor: '#1a237e' }}>
+              {loading ? <CircularProgress size={24} color="inherit" /> : 'Sign In with Supabase'}
             </Button>
           </form>
-          
           <Typography sx={{ mt: 2 }}>
             Don't have an account? <Link href="/signup" sx={{ fontWeight: 'bold' }}>Sign Up</Link>
           </Typography>
