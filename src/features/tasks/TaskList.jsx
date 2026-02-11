@@ -6,13 +6,17 @@ import {
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import CreateTask from './CreateTask';
+import { useDispatch, useSelector } from 'react-redux';
+import { setTasks, setLoading as setReduxLoading } from '../../features/tasks/tasksSlice';
 
 const TaskList = () => {
-  const [tasks, setTasks] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [openModal, setOpenModal] = useState(false);
+  const dispatch = useDispatch();
+  const tasks = useSelector((state) => state.tasks.items);
+  const loading = useSelector((state) => state.tasks.loading);
 
   const fetchTasks = async () => {
+    dispatch(setReduxLoading(true));
     try {
       const response = await axios.request({
         method: 'GET',
@@ -23,11 +27,10 @@ const TaskList = () => {
         }
       });
 
-      setTasks(response.data.data || []);
+      dispatch(setTasks(response.data.data || []));
     } catch (error) {
       console.error("Error fetching data:", error);
-    } finally {
-      setLoading(false);
+      dispatch(setReduxLoading(false));
     }
   };
 

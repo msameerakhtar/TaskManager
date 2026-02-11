@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { TextField, Button, Typography, Paper, Container, Box, Link, Alert } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '../../supabaseClient';
+import { supabase } from '../../config/supabaseClient';
+import { useDispatch } from 'react-redux';
+import { login } from './authSlice';
 
 const Signup = () => {
   const [email, setEmail] = useState('');
@@ -9,6 +11,7 @@ const Signup = () => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+  const dispatch = useDispatch();
 
   const handleSignup = async (e) => {
     e.preventDefault();
@@ -24,7 +27,17 @@ const Signup = () => {
       setError(error.message);
       setLoading(false);
     } else {
+      if (data.session) {
+        localStorage.setItem('userToken', data.session.access_token);
+        
+        dispatch(login({
+          user: data.session.user,
+          token: data.session.access_token
+        }));
+      }
+
       alert("Success! You can now login.");
+      setLoading(false);
       navigate('/login');
     }
   };
@@ -34,15 +47,43 @@ const Signup = () => {
       <Container maxWidth="xs">
         <Paper sx={{ p: 4, textAlign: 'center', borderRadius: 4 }}>
           <Typography variant="h5" gutterBottom fontWeight="bold">Register</Typography>
+          
           {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+          
           <form onSubmit={handleSignup}>
-            <TextField fullWidth label="Email" margin="normal" type="email" required onChange={(e) => setEmail(e.target.value)} />
-            <TextField fullWidth label="Password" type="password" margin="normal" required onChange={(e) => setPassword(e.target.value)} />
-            <Button fullWidth variant="contained" color="success" type="submit" disabled={loading} sx={{ mt: 2, fontWeight: 'bold' }}>
+            <TextField 
+              fullWidth 
+              label="Email" 
+              margin="normal" 
+              type="email" 
+              required 
+              value={email}
+              onChange={(e) => setEmail(e.target.value)} 
+            />
+            <TextField 
+              fullWidth 
+              label="Password" 
+              type="password" 
+              margin="normal" 
+              required 
+              value={password}
+              onChange={(e) => setPassword(e.target.value)} 
+            />
+            <Button 
+              fullWidth 
+              variant="contained" 
+              color="success" 
+              type="submit" 
+              disabled={loading} 
+              sx={{ mt: 2, fontWeight: 'bold' }}
+            >
               {loading ? 'Processing...' : 'Register'}
             </Button>
           </form>
-          <Typography mt={2}>Already a member? <Link href="/login">Login</Link></Typography>
+          
+          <Typography mt={2}>
+            Already a member? <Link href="/login" sx={{ cursor: 'pointer' }}>Login</Link>
+          </Typography>
         </Paper>
       </Container>
     </Box>
@@ -50,59 +91,3 @@ const Signup = () => {
 };
 
 export default Signup;
-
-// import React, { useState } from 'react';
-// import { TextField, Button, Typography, Paper, Container, Box, Link } from '@mui/material';
-// import { useNavigate } from 'react-router-dom';
-
-// const Signup = () => {
-//   const [email, setEmail] = useState('');
-//   const [password, setPassword] = useState('');
-//   const navigate = useNavigate();
-
-//   const handleSignup = (e) => {
-//     e.preventDefault();
-//     localStorage.setItem('registeredUser', JSON.stringify({ email, password }));
-//     alert("Account created successfully!");
-//     navigate('/login');
-//   };
-
-//   return (
-//     <Box sx={{ 
-//       minHeight: '100vh', 
-//       display: 'flex', 
-//       alignItems: 'center', 
-//       backgroundImage: 'url(https://images.unsplash.com/photo-1497215728101-856f4ea42174?auto=format&fit=crop&q=80&w=1600)', 
-//       backgroundSize: 'cover', 
-//       backgroundPosition: 'center',
-//       backgroundRepeat: 'no-repeat'
-//     }}>
-//       <Container maxWidth="xs">
-//         <Paper elevation={15} sx={{ 
-//           p: 4, 
-//           borderRadius: 4, 
-//           bgcolor: 'rgba(255, 255, 255, 0.85)', 
-//           backdropFilter: 'blur(8px)',
-//           textAlign: 'center'
-//         }}>
-//           <Typography variant="h4" gutterBottom sx={{ fontWeight: 800, color: '#2e7d32' }}>
-//             Register
-//           </Typography>
-//           <form onSubmit={handleSignup}>
-//             <TextField fullWidth label="Full Name" margin="normal" variant="outlined" required />
-//             <TextField fullWidth label="Email Address" margin="normal" variant="outlined" onChange={(e) => setEmail(e.target.value)} required />
-//             <TextField fullWidth label="Password" type="password" margin="normal" variant="outlined" onChange={(e) => setPassword(e.target.value)} required />
-//             <Button fullWidth variant="contained" type="submit" color="success" sx={{ mt: 3, py: 1.5, fontWeight: 'bold', fontSize: '1rem' }}>
-//               Create Account
-//             </Button>
-//           </form>
-//           <Typography sx={{ mt: 2 }}>
-//             Already a member? <Link href="/login" sx={{ fontWeight: 'bold' }}>Login</Link>
-//           </Typography>
-//         </Paper>
-//       </Container>
-//     </Box>
-//   );
-// };
-
-// export default Signup;

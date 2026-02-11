@@ -5,6 +5,8 @@ import {
     Snackbar, Alert
 } from '@mui/material';
 import axios from 'axios';
+import { useDispatch } from 'react-redux';
+import { setLoading as setReduxLoading } from '../tasks/tasksSlice';
 
 const style = {
     position: 'absolute',
@@ -22,12 +24,13 @@ const CreateTask = ({ open, handleClose, refreshTasks }) => {
     const [taskTitle, setTaskTitle] = useState('');
     const [description, setDescription] = useState('');
     const [status, setStatus] = useState('pendiente');
-    const [loading, setLoading] = useState(false);
+    const [localLoading, setLocalLoading] = useState(false);
     const [showSuccess, setShowSuccess] = useState(false);
+    const dispatch = useDispatch();
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        setLoading(true);
+        setLocalLoading(true);
 
         const payload = {
             title: taskTitle,
@@ -63,7 +66,7 @@ const CreateTask = ({ open, handleClose, refreshTasks }) => {
             console.error("API Error Details:", error.response?.data);
             alert("Error while adding task!");
         } finally {
-            setLoading(false);
+            setLocalLoading(false);
         }
     };
 
@@ -85,7 +88,7 @@ const CreateTask = ({ open, handleClose, refreshTasks }) => {
                                     required
                                     value={taskTitle}
                                     onChange={(e) => setTaskTitle(e.target.value)}
-                                    disabled={loading}
+                                    disabled={localLoading}
                                 />
 
                                 <TextField
@@ -97,7 +100,7 @@ const CreateTask = ({ open, handleClose, refreshTasks }) => {
                                     required
                                     value={description}
                                     onChange={(e) => setDescription(e.target.value)}
-                                    disabled={loading}
+                                    disabled={localLoading}
                                 />
 
                                 <TextField
@@ -106,7 +109,7 @@ const CreateTask = ({ open, handleClose, refreshTasks }) => {
                                     label="Status"
                                     value={status}
                                     onChange={(e) => setStatus(e.target.value)}
-                                    disabled={loading}
+                                    disabled={localLoading}
                                 >
                                     <MenuItem value="pendiente">Pending</MenuItem>
                                     <MenuItem value="completada">Completed</MenuItem>
@@ -116,10 +119,10 @@ const CreateTask = ({ open, handleClose, refreshTasks }) => {
                                     type="submit"
                                     variant="contained"
                                     size="large"
-                                    disabled={loading}
+                                    disabled={localLoading}
                                     sx={{ bgcolor: '#1a237e', mt: 1, py: 1.5, fontWeight: 'bold' }}
                                 >
-                                    {loading ? <CircularProgress size={24} color="inherit" /> : 'ADD TO TABLE'}
+                                    {localLoading ? <CircularProgress size={24} color="inherit" /> : 'ADD TO TABLE'}
                                 </Button>
                             </Stack>
                         </form>

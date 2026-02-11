@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { TextField, Button, Typography, Paper, Container, Box, Link, Alert, CircularProgress } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '../../supabaseClient';
-
+import { supabase } from '../../config/supabaseClient';
+import { useDispatch } from 'react-redux';
+import { login } from './authSlice';
 
 const Login = () => {
   const [email, setEmail] = useState('');
@@ -10,6 +11,7 @@ const Login = () => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+  const dispatch = useDispatch();
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -25,7 +27,16 @@ const Login = () => {
       setError(error.message);
       setLoading(false);
     } else if (data.session) {
-      localStorage.setItem('userToken', data.session.access_token); 
+      const token = data.session.access_token;
+      const user = data.session.user;
+
+      localStorage.setItem('userToken', token); 
+
+      dispatch(login({
+        user: user,
+        token: token
+      }));
+
       navigate('/tasks', { replace: true });
     }
   };
