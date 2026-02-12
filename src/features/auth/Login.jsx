@@ -47,13 +47,39 @@ const Login = () => {
         <Paper elevation={15} sx={{ p: 4, borderRadius: 4, bgcolor: 'rgba(255, 255, 255, 0.85)', backdropFilter: 'blur(8px)', textAlign: 'center' }}>
           <Typography variant="h4" fontWeight="800" color="#1a237e">Secure Login</Typography>
           {error && <Alert severity="error" sx={{ mb: 2, mt: 2 }}>{error}</Alert>}
-          <form onSubmit={handleLogin} autoComplete="off">
-            <TextField fullWidth label="Email" margin="normal" value={email} onChange={(e) => setEmail(e.target.value)} />
-            <TextField fullWidth label="Password" type="password" margin="normal" value={password} onChange={(e) => setPassword(e.target.value)} />
+          
+          <form onSubmit={handleLogin} autoComplete="new-off">
+            <TextField 
+              fullWidth 
+              label="Email" 
+              margin="normal" 
+              value={email} 
+              onChange={(e) => setEmail(e.target.value)}
+              name="my-unique-email-field"
+              inputProps={{
+                autoComplete: 'no',
+                form: {
+                  autoComplete: 'off',
+                },
+              }}
+            />
+            <TextField 
+              fullWidth 
+              label="Password" 
+              type="password" 
+              margin="normal" 
+              value={password} 
+              onChange={(e) => setPassword(e.target.value)}
+              name="my-unique-password-field"
+              inputProps={{
+                autoComplete: 'new-password',
+              }}
+            />
             <Button fullWidth variant="contained" type="submit" disabled={loading} sx={{ mt: 3, py: 1.5, bgcolor: '#1a237e' }}>
               {loading ? <CircularProgress size={24} color="inherit" /> : 'Sign In with Supabase'}
             </Button>
           </form>
+          
           <Typography sx={{ mt: 2 }}>
             Don't have an account? <Link href="/signup" sx={{ fontWeight: 'bold' }}>Sign Up</Link>
           </Typography>
