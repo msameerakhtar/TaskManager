@@ -1,19 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import {
     AppBar, Toolbar, Typography, Avatar, Menu, MenuItem,
-    IconButton, Box, Container, Divider, ListItemIcon, CircularProgress
+    IconButton, Box, Container, Divider, ListItemIcon, CircularProgress, Button
 } from '@mui/material';
 import {
     Logout as LogoutIcon,
     Person as PersonIcon,
+    Menu as MenuIcon
 } from '@mui/icons-material';
-import { Outlet, useNavigate, useLocation } from 'react-router-dom';
+import { Outlet, useNavigate, useLocation, Link } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import { logout, login } from '../features/auth/authSlice';
 import { supabase } from '../config/supabaseClient';
 
 const Layout = () => {
     const [anchorEl, setAnchorEl] = useState(null);
+    const [anchorElNav, setAnchorElNav] = useState(null);
     const [isInitialLoading, setIsInitialLoading] = useState(true);
     const open = Boolean(anchorEl);
     const navigate = useNavigate();
@@ -51,6 +53,13 @@ const Layout = () => {
         navigate('/login');
     };
 
+    const navItems = [
+        { label: 'Home', path: '/tasks' },
+        { label: 'Profile', path: '/profile' },
+        { label: 'Contact Us', path: '/contact' },
+        { label: 'Blog', path: '/blog' },
+    ];
+
     if (isInitialLoading) {
         return (
             <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', bgcolor: '#f8f9fa' }}>
@@ -62,74 +71,105 @@ const Layout = () => {
     return (
         <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
             <AppBar position="sticky" elevation={0} sx={{ bgcolor: '#1a237e', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
-                <Toolbar>
-                    <Typography variant="h6" sx={{ flexGrow: 1, fontWeight: '600', letterSpacing: 0.5 }}>
-                        👋 Welcome, {fullName}
-                    </Typography>
+                <Container maxWidth="xl">
+                    <Toolbar disableGutters sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                        
+                        <Box sx={{ display: 'flex', alignItems: 'center', minWidth: { md: '250px' } }}>
+                            <Typography variant="h6" sx={{ fontWeight: '600', letterSpacing: 0.5 }}>
+                                👋 Welcome, {fullName}
+                            </Typography>
+                        </Box>
 
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <IconButton
-                            onClick={handleMenu}
-                            sx={{ p: 0.5, border: '2px solid rgba(255,255,255,0.2)', transition: '0.3s', '&:hover': { borderColor: 'white' } }}
-                        >
-                            <Avatar
-                                src={avatarUrl}
-                                sx={{ width: 35, height: 35, bgcolor: '#2e7d32' }}
+                        <Box sx={{ flexGrow: 1, display: { xs: 'none', md: 'flex' }, justifyContent: 'center', gap: 2 }}>
+                            {navItems.map((item) => (
+                                <Button 
+                                    key={item.label} 
+                                    component={Link} 
+                                    to={item.path} 
+                                    sx={{ 
+                                        color: 'white', 
+                                        opacity: location.pathname === item.path ? 1 : 0.7,
+                                        fontWeight: location.pathname === item.path ? 'bold' : '500',
+                                        fontSize: '0.95rem',
+                                        px: 2,
+                                        '&:hover': { opacity: 1 }
+                                    }}
+                                >
+                                    {item.label}
+                                </Button>
+                            ))}
+                        </Box>
+
+                        <Box sx={{ display: { xs: 'flex', md: 'none' }, flexGrow: 1, justifyContent: 'center' }}>
+                            <IconButton color="inherit" onClick={(e) => setAnchorElNav(e.currentTarget)}>
+                                <MenuIcon />
+                            </IconButton>
+                            <Menu
+                                anchorEl={anchorElNav}
+                                open={Boolean(anchorElNav)}
+                                onClose={() => setAnchorElNav(null)}
                             >
-                                {fullName.charAt(0).toUpperCase()}
-                            </Avatar>
-                        </IconButton>
+                                {navItems.map((item) => (
+                                    <MenuItem key={item.label} onClick={() => { navigate(item.path); setAnchorElNav(null); }}>
+                                        <Typography textAlign="center">{item.label}</Typography>
+                                    </MenuItem>
+                                ))}
+                            </Menu>
+                        </Box>
 
-                        <Menu
-                            anchorEl={anchorEl}
-                            open={open}
-                            onClose={handleClose}
-                            onClick={handleClose}
-                            PaperProps={{
-                                elevation: 0,
-                                sx: {
-                                    overflow: 'visible',
-                                    filter: 'drop-shadow(0px 4px 20px rgba(0,0,0,0.15))',
-                                    mt: 1.5,
-                                    borderRadius: 3,
-                                    minWidth: 220,
-                                    '&:before': {
-                                        content: '""', display: 'block', position: 'absolute',
-                                        top: 0, right: 14, width: 10, height: 10,
-                                        bgcolor: 'background.paper', transform: 'translateY(-50%) rotate(45deg)', zIndex: 0,
+                        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', minWidth: { md: '250px' }, gap: 1 }}>
+                            <IconButton
+                                onClick={handleMenu}
+                                sx={{ p: 0.5, border: '2px solid rgba(255,255,255,0.2)', transition: '0.3s', '&:hover': { borderColor: 'white' } }}
+                            >
+                                <Avatar src={avatarUrl} sx={{ width: 35, height: 35, bgcolor: '#2e7d32' }}>
+                                    {fullName.charAt(0).toUpperCase()}
+                                </Avatar>
+                            </IconButton>
+
+                            <Menu
+                                anchorEl={anchorEl}
+                                open={open}
+                                onClose={handleClose}
+                                onClick={handleClose}
+                                PaperProps={{
+                                    elevation: 0,
+                                    sx: {
+                                        overflow: 'visible',
+                                        filter: 'drop-shadow(0px 4px 20px rgba(0,0,0,0.15))',
+                                        mt: 1.5,
+                                        borderRadius: 3,
+                                        minWidth: 220,
+                                        '&:before': {
+                                            content: '""', display: 'block', position: 'absolute',
+                                            top: 0, right: 14, width: 10, height: 10,
+                                            bgcolor: 'background.paper', transform: 'translateY(-50%) rotate(45deg)', zIndex: 0,
+                                        },
                                     },
-                                },
-                            }}
-                            transformOrigin={{ horizontal: 'right', vertical: 'top' }}
-                            anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
-                        >
-                            <Box sx={{ px: 2, py: 1.5 }}>
-                                <Typography variant="subtitle2" fontWeight="bold">{fullName}</Typography>
-                                <Typography variant="caption" color="text.secondary" display="block">
-                                    {user?.email}
-                                </Typography>
-                            </Box>
-
-                            <Divider />
-
-                            <MenuItem onClick={() => navigate('/profile')} sx={{ py: 1.2 }}>
-                                <ListItemIcon>
-                                    <PersonIcon fontSize="small" color="primary" />
-                                </ListItemIcon>
-                                My Profile
-                            </MenuItem>
-
-                            <Divider />
-
-                            <MenuItem onClick={handleLogout} sx={{ py: 1.2, color: 'error.main' }}>
-                                <ListItemIcon>
-                                    <LogoutIcon fontSize="small" color="error" />
-                                </ListItemIcon>
-                                Logout
-                            </MenuItem>
-                        </Menu>
-                    </Box>
-                </Toolbar>
+                                }}
+                                transformOrigin={{ horizontal: 'right', vertical: 'top' }}
+                                anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
+                            >
+                                <Box sx={{ px: 2, py: 1.5 }}>
+                                    <Typography variant="subtitle2" fontWeight="bold">{fullName}</Typography>
+                                    <Typography variant="caption" color="text.secondary" display="block">
+                                        {user?.email}
+                                    </Typography>
+                                </Box>
+                                <Divider />
+                                <MenuItem onClick={() => navigate('/profile')} sx={{ py: 1.2 }}>
+                                    <ListItemIcon><PersonIcon fontSize="small" color="primary" /></ListItemIcon>
+                                    My Profile
+                                </MenuItem>
+                                <Divider />
+                                <MenuItem onClick={handleLogout} sx={{ py: 1.2, color: 'error.main' }}>
+                                    <ListItemIcon><LogoutIcon fontSize="small" color="error" /></ListItemIcon>
+                                    Logout
+                                </MenuItem>
+                            </Menu>
+                        </Box>
+                    </Toolbar>
+                </Container>
             </AppBar>
 
             <Box component="main" sx={{ flexGrow: 1, py: 4, bgcolor: '#f8f9fa' }}>
@@ -174,15 +214,15 @@ const Layout = () => {
                                 <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 2, color: '#4caf50' }}>
                                     PLATFORM
                                 </Typography>
-                                <Typography variant="body2" sx={{ mb: 1, cursor: 'pointer', '&:hover': { color: '#4caf50' } }} onClick={() => navigate('/')}>Dashboard</Typography>
+                                <Typography variant="body2" sx={{ mb: 1, cursor: 'pointer', '&:hover': { color: '#4caf50' } }} onClick={() => navigate('/tasks')}>Dashboard</Typography>
                                 <Typography variant="body2" sx={{ mb: 1, cursor: 'pointer', '&:hover': { color: '#4caf50' } }} onClick={() => navigate('/profile')}>Profile</Typography>
                             </Box>
                             <Box>
                                 <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 2, color: '#4caf50' }}>
                                     SUPPORT
                                 </Typography>
-                                <Typography variant="body2" sx={{ mb: 1, cursor: 'pointer', '&:hover': { color: '#4caf50' } }}>Help Center</Typography>
-                                <Typography variant="body2" sx={{ mb: 1, cursor: 'pointer', '&:hover': { color: '#4caf50' } }}>Privacy Policy</Typography>
+                                <Typography variant="body2" sx={{ mb: 1, cursor: 'pointer', '&:hover': { color: '#4caf50' } }} onClick={() => navigate('/blog')}>Blog</Typography>
+                                <Typography variant="body2" sx={{ mb: 1, cursor: 'pointer', '&:hover': { color: '#4caf50' } }} onClick={() => navigate('/contact')}>Contact Us</Typography>
                             </Box>
                         </Box>
                     </Box>

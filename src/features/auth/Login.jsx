@@ -45,7 +45,7 @@ const Login = () => {
     <Box sx={{ minHeight: '100vh', display: 'flex', alignItems: 'center', backgroundImage: 'url(https://images.unsplash.com/photo-1451187580459-43490279c0fa?auto=format&fit=crop&q=80&w=1600)', backgroundSize: 'cover' }}>
       <Container maxWidth="xs">
         <Paper elevation={15} sx={{ p: 4, borderRadius: 4, bgcolor: 'rgba(255, 255, 255, 0.85)', backdropFilter: 'blur(8px)', textAlign: 'center' }}>
-          <Typography variant="h4" fontWeight="800" color="#1a237e">Secure Login</Typography>
+          <Typography variant="h4" fontWeight="800" color="#1a237e">Login</Typography>
           {error && <Alert severity="error" sx={{ mb: 2, mt: 2 }}>{error}</Alert>}
           
           <form onSubmit={handleLogin} autoComplete="new-off">
@@ -76,7 +76,7 @@ const Login = () => {
               }}
             />
             <Button fullWidth variant="contained" type="submit" disabled={loading} sx={{ mt: 3, py: 1.5, bgcolor: '#1a237e' }}>
-              {loading ? <CircularProgress size={24} color="inherit" /> : 'Sign In with Supabase'}
+              {loading ? <CircularProgress size={24} color="inherit" /> : 'Sign In'}
             </Button>
           </form>
           

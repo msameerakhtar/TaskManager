@@ -8,6 +8,8 @@ import Login from './features/auth/Login';
 import Signup from './features/auth/Signup';
 import TaskList from './features/tasks/TaskList';
 import ProtectedRoute from './routes/ProtectedRoute';
+import ContactUs from './pages/ContactUs';
+import Blog from './pages/Blog';
 
 const router = createBrowserRouter([
   { path: "/", element: <Home /> }, 
@@ -20,6 +22,8 @@ const router = createBrowserRouter([
     children: [
       { path: "/tasks", element: <TaskList /> },
       { path: "/profile", element: <Profile /> },
+      {path:"/contact", element: <ContactUs /> },
+      {path:"/blog", element: <Blog /> }
     ]
   },
   
