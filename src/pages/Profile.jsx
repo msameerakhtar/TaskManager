@@ -10,36 +10,18 @@ const Profile = () => {
 
     return (
         <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
-            <Paper elevation={3} sx={{ p: 4, maxWidth: 400, width: '100%', textAlign: 'center', borderRadius: 4 }}>
-                <Avatar 
-                    src={avatarUrl}
-                    sx={{ 
-                        width: 120, 
-                        height: 120, 
-                        mx: 'auto', 
-                        mb: 2, 
-                        bgcolor: '#1a237e', 
-                        fontSize: '3rem',
-                        border: '3px solid #f5f5f5',
-                        boxShadow: '0px 4px 10px rgba(0,0,0,0.1)'
-                    }}
-                >
+            <Paper elevation={3} sx={{ p: 4, maxWidth: 400, width: '100%', textAlign: 'center' }}>
+                <Avatar src={avatarUrl} sx={{ width: 120, height: 120, mx: 'auto', mb: 2, bgcolor: 'primary.main', fontSize: '3rem', border: '3px solid #f5f5f5' }}>
                     {fullName.charAt(0).toUpperCase()}
                 </Avatar>
-                
-                <Typography variant="h5" fontWeight="bold" gutterBottom>{fullName}</Typography>
-                <Typography color="textSecondary" variant="body1" sx={{ mb: 2 }}>{email}</Typography>
-                
+                <Typography variant="h5" gutterBottom>{fullName}</Typography>
+                <Typography color="text.secondary" sx={{ mb: 2 }}>{email}</Typography>
                 <Divider sx={{ my: 2 }} />
-                
-                <Box sx={{ bgcolor: '#e8f5e9', py: 1, borderRadius: 2 }}>
-                    <Typography variant="body2" color="#2e7d32" fontWeight="bold">
-                        Account Status: Active
-                    </Typography>
+                <Box sx={{ bgcolor: 'secondary.light', py: 1, borderRadius: 2 }}>
+                    <Typography variant="body2" color="secondary.dark" fontWeight="bold">Account Status: Active</Typography>
                 </Box>
             </Paper>
         </Box>
     );
 };
-
 export default Profile;
