@@ -74,7 +74,7 @@ const Layout = () => {
             <AppBar position="sticky" elevation={0} color="primary">
                 <Container maxWidth="xl">
                     <Toolbar disableGutters sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                        
+
                         <Box sx={{ display: 'flex', alignItems: 'center', minWidth: { md: '250px' } }}>
                             <Typography variant="h6" sx={{ fontWeight: '600' }}>
                                 👋 Welcome, {fullName}
@@ -83,12 +83,12 @@ const Layout = () => {
 
                         <Box sx={{ flexGrow: 1, display: { xs: 'none', md: 'flex' }, justifyContent: 'center', gap: 2 }}>
                             {navItems.map((item) => (
-                                <Button 
-                                    key={item.label} 
-                                    component={Link} 
-                                    to={item.path} 
-                                    sx={{ 
-                                        color: 'white', 
+                                <Button
+                                    key={item.label}
+                                    component={Link}
+                                    to={item.path}
+                                    sx={{
+                                        color: 'white',
                                         opacity: location.pathname === item.path ? 1 : 0.7,
                                         fontWeight: location.pathname === item.path ? 'bold' : '500'
                                     }}

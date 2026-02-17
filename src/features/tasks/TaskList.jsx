@@ -6,11 +6,13 @@ import {
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import CreateTask from './CreateTask';
+import SearchBar from './SearchBar'; 
 import { useDispatch, useSelector } from 'react-redux';
 import { setTasks, setLoading as setReduxLoading } from '../../features/tasks/tasksSlice';
 
 const TaskList = () => {
   const [openModal, setOpenModal] = useState(false);
+  const [filteredTasks, setFilteredTasks] = useState([]);
   const dispatch = useDispatch();
   const tasks = useSelector((state) => state.tasks.items);
   const loading = useSelector((state) => state.tasks.loading);
@@ -26,7 +28,6 @@ const TaskList = () => {
           'x-rapidapi-host': 'task-manager-api3.p.rapidapi.com'
         }
       });
-
       dispatch(setTasks(response.data.data || []));
     } catch (error) {
       console.error("Error fetching data:", error);
@@ -53,7 +54,7 @@ const TaskList = () => {
               📋 Task Management Dashboard
             </Typography>
             <Typography variant="body2" color="textSecondary">
-              Viewing {tasks.length} active tasks
+              Viewing {filteredTasks.length} tasks
             </Typography>
           </Box>
 
@@ -66,6 +67,8 @@ const TaskList = () => {
             Create Task
           </Button>
         </Box>
+
+        <SearchBar tasks={tasks} onFilter={setFilteredTasks} />
 
         <TableContainer
           component={Paper}
@@ -85,7 +88,7 @@ const TaskList = () => {
               </TableRow>
             </TableHead>
             <TableBody>
-              {tasks.map((task, index) => (
+              {filteredTasks.map((task, index) => (
                 <TableRow
                   key={task._id || index}
                   hover
@@ -121,10 +124,10 @@ const TaskList = () => {
                   </TableCell>
                 </TableRow>
               ))}
-              {tasks.length === 0 && (
+              {filteredTasks.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={3} align="center" sx={{ py: 3 }}>
-                    No tasks found. Click "Create Task" to add one!
+                    No tasks found matching your search.
                   </TableCell>
                 </TableRow>
               )}
