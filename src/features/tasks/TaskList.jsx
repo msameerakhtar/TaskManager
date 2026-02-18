@@ -2,17 +2,23 @@ import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import {
   Table, TableBody, TableCell, TableContainer,
-  TableHead, TableRow, Paper, Typography, CircularProgress, Box, Chip, Button, Container
+  TableHead, TableRow, Paper, Typography, CircularProgress, Box, Chip, Button, Container, IconButton
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
+import EditIcon from '@mui/icons-material/Edit';
 import CreateTask from './CreateTask';
 import SearchBar from './SearchBar'; 
+import UpdateTask from './UpdateTask';
+import DeleteTask from './DeleteTask';
 import { useDispatch, useSelector } from 'react-redux';
 import { setTasks, setLoading as setReduxLoading } from '../../features/tasks/tasksSlice';
 
 const TaskList = () => {
   const [openModal, setOpenModal] = useState(false);
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [selectedTask, setSelectedTask] = useState(null);
   const [filteredTasks, setFilteredTasks] = useState([]);
+  
   const dispatch = useDispatch();
   const tasks = useSelector((state) => state.tasks.items);
   const loading = useSelector((state) => state.tasks.loading);
@@ -24,15 +30,23 @@ const TaskList = () => {
         method: 'GET',
         url: 'https://task-manager-api3.p.rapidapi.com/',
         headers: {
-          'x-rapidapi-key': '298432d9e1msh8c789619c8fdebfp1341fbjsn86f3beb7a04c',
+          'x-rapidapi-key': 'fb81aafcebmshf175382b298b8b6p1e09cdjsnad1fd954cea4',
           'x-rapidapi-host': 'task-manager-api3.p.rapidapi.com'
         }
       });
-      dispatch(setTasks(response.data.data || []));
+      const rawData = response.data.data || [];
+      const validTasks = rawData.filter(task => (task._id || task.id) != null);
+
+      dispatch(setTasks(validTasks));
     } catch (error) {
       console.error("Error fetching data:", error);
       dispatch(setReduxLoading(false));
     }
+  };
+
+  const handleEditClick = (task) => {
+    setSelectedTask(task);
+    setIsEditOpen(true);
   };
 
   useEffect(() => {
@@ -85,6 +99,7 @@ const TaskList = () => {
                 <TableCell sx={{ color: '#fff', fontWeight: 'bold' }}>ID</TableCell>
                 <TableCell sx={{ color: '#fff', fontWeight: 'bold' }}>Task Details</TableCell>
                 <TableCell align="center" sx={{ color: '#fff', fontWeight: 'bold' }}>Status</TableCell>
+                <TableCell align="center" sx={{ color: '#fff', fontWeight: 'bold' }}>Actions</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -122,11 +137,24 @@ const TaskList = () => {
                       sx={{ fontWeight: 'bold', minWidth: '100px', fontSize: '0.75rem' }}
                     />
                   </TableCell>
+
+                  <TableCell align="center">
+                    <Box sx={{ display: 'flex', justifyContent: 'center', gap: 1 }}>
+                      <IconButton onClick={() => handleEditClick(task)} color="primary" size="small">
+                        <EditIcon fontSize="small" />
+                      </IconButton>
+                      
+                      <DeleteTask 
+                        taskId={task._id || task.id} 
+                        onDeleteSuccess={fetchTasks} 
+                      />
+                    </Box>
+                  </TableCell>
                 </TableRow>
               ))}
               {filteredTasks.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={3} align="center" sx={{ py: 3 }}>
+                  <TableCell colSpan={4} align="center" sx={{ py: 3 }}>
                     No tasks found matching your search.
                   </TableCell>
                 </TableRow>
@@ -139,6 +167,13 @@ const TaskList = () => {
           open={openModal}
           handleClose={() => setOpenModal(false)}
           refreshTasks={fetchTasks}
+        />
+
+        <UpdateTask 
+          open={isEditOpen} 
+          handleClose={() => setIsEditOpen(false)} 
+          taskData={selectedTask}
+          onUpdateSuccess={fetchTasks}
         />
       </Container>
     </Box>
