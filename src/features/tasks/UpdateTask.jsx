@@ -25,7 +25,7 @@ const UpdateTask = ({ open, handleClose, taskData, onUpdateSuccess }) => {
   };
 
   const handleUpdate = async () => {
-    const taskId = taskData?._id || taskData?.id;
+    const taskId = taskData?.id;
 
     if (!taskId) {
       alert("Error: Task ID missing!");
@@ -33,16 +33,7 @@ const UpdateTask = ({ open, handleClose, taskData, onUpdateSuccess }) => {
     }
 
     try {
-      await axios.request({
-        method: 'PUT',
-        url: `https://task-manager-api3.p.rapidapi.com/${taskId}`,
-        headers: {
-          'x-rapidapi-key': 'fb81aafcebmshf175382b298b8b6p1e09cdjsnad1fd954cea4',
-          'x-rapidapi-host': 'task-manager-api3.p.rapidapi.com',
-          'Content-Type': 'application/json'
-        },
-        data: formData
-      });
+      await axios.put(`https://6996bef77d1786436575294e.mockapi.io/api/tm/tasks/${taskId}`, formData);
       onUpdateSuccess();
       handleClose();
     } catch (error) {

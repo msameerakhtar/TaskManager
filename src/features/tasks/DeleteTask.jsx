@@ -5,22 +5,14 @@ import DeleteIcon from '@mui/icons-material/Delete';
 
 const DeleteTask = ({ taskId, onDeleteSuccess }) => {
   const handleDelete = async () => {
-    if (!taskId || taskId === "undefined") {
+    if (!taskId) {
       alert("Error: Task ID missing!");
       return;
     }
 
     if (window.confirm("Are you sure you want to delete this task?")) {
       try {
-        await axios.request({
-          method: 'DELETE',
-          url: `https://task-manager-api3.p.rapidapi.com/${taskId}`,
-          headers: {
-            'x-rapidapi-key': 'fb81aafcebmshf175382b298b8b6p1e09cdjsnad1fd954cea4',
-            'x-rapidapi-host': 'task-manager-api3.p.rapidapi.com'
-          }
-        });
-        
+        await axios.delete(`https://6996bef77d1786436575294e.mockapi.io/api/tm/tasks/${taskId}`);
         onDeleteSuccess();
       } catch (error) {
         console.error("Delete failed:", error.response?.data || error.message);

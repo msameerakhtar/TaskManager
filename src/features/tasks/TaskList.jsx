@@ -26,16 +26,13 @@ const TaskList = () => {
   const fetchTasks = async () => {
     dispatch(setReduxLoading(true));
     try {
-      const response = await axios.request({
-        method: 'GET',
-        url: 'https://task-manager-api3.p.rapidapi.com/',
-        headers: {
-          'x-rapidapi-key': 'fb81aafcebmshf175382b298b8b6p1e09cdjsnad1fd954cea4',
-          'x-rapidapi-host': 'task-manager-api3.p.rapidapi.com'
-        }
+      const response = await axios.get('https://6996bef77d1786436575294e.mockapi.io/api/tm/tasks');
+      const rawData = response.data || [];
+      
+      const validTasks = rawData.filter(task => {
+        const id = task.id;
+        return id !== null && id !== undefined && id !== '';
       });
-      const rawData = response.data.data || [];
-      const validTasks = rawData.filter(task => (task._id || task.id) != null);
 
       dispatch(setTasks(validTasks));
     } catch (error) {
@@ -105,7 +102,7 @@ const TaskList = () => {
             <TableBody>
               {filteredTasks.map((task, index) => (
                 <TableRow
-                  key={task._id || index}
+                  key={task.id || index}
                   hover
                   sx={{
                     '&:nth-of-type(even)': { bgcolor: '#fafafa' },
@@ -145,7 +142,7 @@ const TaskList = () => {
                       </IconButton>
                       
                       <DeleteTask 
-                        taskId={task._id || task.id} 
+                        taskId={task.id} 
                         onDeleteSuccess={fetchTasks} 
                       />
                     </Box>

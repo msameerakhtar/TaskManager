@@ -5,8 +5,6 @@ import {
     Snackbar, Alert
 } from '@mui/material';
 import axios from 'axios';
-import { useDispatch } from 'react-redux';
-import { setLoading as setReduxLoading } from '../tasks/tasksSlice';
 
 const style = {
     position: 'absolute',
@@ -26,7 +24,6 @@ const CreateTask = ({ open, handleClose, refreshTasks }) => {
     const [status, setStatus] = useState('pendiente');
     const [localLoading, setLocalLoading] = useState(false);
     const [showSuccess, setShowSuccess] = useState(false);
-    const dispatch = useDispatch();
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -34,22 +31,12 @@ const CreateTask = ({ open, handleClose, refreshTasks }) => {
 
         const payload = {
             title: taskTitle,
-            task: taskTitle,
             description: description,
             status: status
         };
 
         try {
-            await axios.request({
-                method: 'POST',
-                url: 'https://task-manager-api3.p.rapidapi.com/',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'x-rapidapi-key': 'c2b5fe3070msh7ca68c6210a1bb1p1f7554jsn29ef05eade98',
-                    'x-rapidapi-host': 'task-manager-api3.p.rapidapi.com'
-                },
-                data: payload
-            });
+            await axios.post('https://6996bef77d1786436575294e.mockapi.io/api/tm/tasks', payload);
 
             setTaskTitle('');
             setDescription('');
