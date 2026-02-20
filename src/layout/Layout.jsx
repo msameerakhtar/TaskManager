@@ -33,7 +33,7 @@ const Layout = () => {
 
             const { data: { session } } = await supabase.auth.getSession();
             if (session) {
-                dispatch(login({ user: session.user, session }));
+                dispatch(login({ user: session.user, token: session.access_token }));
             } else if (location.pathname !== '/login') {
                 navigate('/login');
             }
@@ -43,15 +43,23 @@ const Layout = () => {
         restoreSession();
     }, [dispatch, user, navigate, location.pathname]);
 
-    const fullName = user?.user_metadata?.full_name || "User";
+    const fullName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || "User";
     const avatarUrl = user?.user_metadata?.avatar_url;
 
     const handleMenu = (event) => setAnchorEl(event.currentTarget);
     const handleClose = () => setAnchorEl(null);
 
-    const handleLogout = () => {
-        dispatch(logout());
-        navigate('/login');
+    const handleLogout = async () => {
+        try {
+            await supabase.auth.signOut();
+            dispatch(logout());
+            navigate('/login', { replace: true });
+            window.location.reload();
+        } catch (error) {
+            console.error("Error logging out:", error);
+            dispatch(logout());
+            navigate('/login');
+        }
     };
 
     const navItems = [
@@ -90,7 +98,8 @@ const Layout = () => {
                                     sx={{
                                         color: 'white',
                                         opacity: location.pathname === item.path ? 1 : 0.7,
-                                        fontWeight: location.pathname === item.path ? 'bold' : '500'
+                                        fontWeight: location.pathname === item.path ? 'bold' : '500',
+                                        textTransform: 'none'
                                     }}
                                 >
                                     {item.label}
@@ -106,6 +115,7 @@ const Layout = () => {
                                 anchorEl={anchorElNav}
                                 open={Boolean(anchorElNav)}
                                 onClose={() => setAnchorElNav(null)}
+                                PaperProps={{ sx: { minWidth: 150 } }}
                             >
                                 {navItems.map((item) => (
                                     <MenuItem key={item.label} onClick={() => { navigate(item.path); setAnchorElNav(null); }}>
@@ -168,13 +178,13 @@ const Layout = () => {
                         <Box sx={{ display: 'flex', gap: 6, justifyContent: { xs: 'center', md: 'flex-start' } }}>
                             <Box>
                                 <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 2, color: 'secondary.main' }}>PLATFORM</Typography>
-                                <Typography variant="body2" sx={{ mb: 1, cursor: 'pointer' }} onClick={() => navigate('/tasks')}>Dashboard</Typography>
-                                <Typography variant="body2" sx={{ mb: 1, cursor: 'pointer' }} onClick={() => navigate('/profile')}>Profile</Typography>
+                                <Typography variant="body2" sx={{ mb: 1, cursor: 'pointer', opacity: 0.8 }} onClick={() => navigate('/tasks')}>Dashboard</Typography>
+                                <Typography variant="body2" sx={{ mb: 1, cursor: 'pointer', opacity: 0.8 }} onClick={() => navigate('/profile')}>Profile</Typography>
                             </Box>
                             <Box>
                                 <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 2, color: 'secondary.main' }}>SUPPORT</Typography>
-                                <Typography variant="body2" sx={{ mb: 1, cursor: 'pointer' }} onClick={() => navigate('/blog')}>Blog</Typography>
-                                <Typography variant="body2" sx={{ mb: 1, cursor: 'pointer' }} onClick={() => navigate('/contact')}>Contact Us</Typography>
+                                <Typography variant="body2" sx={{ mb: 1, cursor: 'pointer', opacity: 0.8 }} onClick={() => navigate('/blog')}>Blog</Typography>
+                                <Typography variant="body2" sx={{ mb: 1, cursor: 'pointer', opacity: 0.8 }} onClick={() => navigate('/contact')}>Contact Us</Typography>
                             </Box>
                         </Box>
                     </Box>

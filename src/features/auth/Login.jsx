@@ -3,7 +3,7 @@ import { TextField, Button, Typography, Paper, Container, Box, Link, Alert, Circ
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../config/supabaseClient';
 import { useDispatch } from 'react-redux';
-import { login } from './authSlice';
+import { login } from '../auth/authSlice';
 
 const Login = () => {
   const [email, setEmail] = useState('');
@@ -30,13 +30,13 @@ const Login = () => {
       const token = data.session.access_token;
       const user = data.session.user;
 
-      localStorage.setItem('userToken', token); 
-
+      
       dispatch(login({
         user: user,
         token: token
       }));
 
+      
       navigate('/tasks', { replace: true });
     }
   };
