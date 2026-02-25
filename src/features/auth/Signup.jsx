@@ -1,25 +1,38 @@
-import React, { useState } from 'react';
-import { TextField, Button, Typography, Paper, Container, Box, Link, Alert, Avatar } from '@mui/material';
-import PhotoCamera from '@mui/icons-material/PhotoCamera';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { 
+  TextField, Button, Typography, Paper, Container, 
+  Box, Link, Alert, Avatar, CircularProgress, InputAdornment, IconButton 
+} from '@mui/material';
+import { PhotoCamera, Visibility, VisibilityOff } from '@mui/icons-material';
+import { useNavigate, Link as RouterLink } from 'react-router-dom';
 import { supabase } from '../../config/supabaseClient';
 import { useDispatch } from 'react-redux';
-import { login } from './authSlice';
+import { login } from '../auth/authSlice';
 
 const Signup = () => {
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [imageFile, setImageFile] = useState(null);
   const [previewUrl, setPreviewUrl] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  
   const navigate = useNavigate();
   const dispatch = useDispatch();
+
+  useEffect(() => {
+    return () => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+    };
+  }, [previewUrl]);
 
   const handleImageChange = (e) => {
     const file = e.target.files[0];
     if (file) {
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
       setImageFile(file);
       setPreviewUrl(URL.createObjectURL(file));
     }
@@ -27,36 +40,40 @@ const Signup = () => {
 
   const handleSignup = async (e) => {
     e.preventDefault();
-    setLoading(true);
     setError('');
+
+    if (password !== confirmPassword) {
+      return setError("Passwords do not match.");
+    }
+
+    setLoading(true);
 
     try {
       let avatarUrl = "";
 
       if (imageFile) {
         const fileExt = imageFile.name.split('.').pop();
-        const fileName = `${Math.random()}.${fileExt}`;
-        const filePath = `${fileName}`;
-
-        let { error: uploadError } = await supabase.storage
+        const fileName = `${Date.now()}-${Math.floor(Math.random() * 1000)}.${fileExt}`;
+        
+        const { error: uploadError } = await supabase.storage
           .from('avatars')
-          .upload(filePath, imageFile);
+          .upload(fileName, imageFile);
 
         if (uploadError) throw uploadError;
 
         const { data: publicUrlData } = supabase.storage
           .from('avatars')
-          .getPublicUrl(filePath);
+          .getPublicUrl(fileName);
         
         avatarUrl = publicUrlData.publicUrl;
       }
 
       const { data, error: signupError } = await supabase.auth.signUp({
-        email,
+        email: email.trim(),
         password,
         options: {
           data: {
-            full_name: fullName,
+            full_name: fullName.trim(),
             avatar_url: avatarUrl,
           },
         },
@@ -65,15 +82,15 @@ const Signup = () => {
       if (signupError) throw signupError;
 
       if (data.session) {
-        localStorage.setItem('userToken', data.session.access_token);
         dispatch(login({
           user: data.session.user,
           token: data.session.access_token
         }));
+        navigate('/tasks', { replace: true });
+      } else {
+        alert("Account created! Please check your email for verification.");
+        navigate('/login');
       }
-
-      alert("Success! Account created.");
-      navigate('/login');
     } catch (err) {
       setError(err.message);
     } finally {
@@ -86,38 +103,75 @@ const Signup = () => {
       minHeight: '100vh', 
       display: 'flex', 
       alignItems: 'center', 
-      backgroundImage: 'url(https://images.unsplash.com/photo-1497215728101-856f4ea42174?auto=format&fit=crop&q=80&w=1600)', 
-      backgroundSize: 'cover',
-      backgroundPosition: 'center',
-      backgroundAttachment: 'fixed',
+      background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
+      position: 'relative',
+      overflow: 'hidden',
       py: 4
     }}>
-      <Container maxWidth="xs">
-        <Paper elevation={15} sx={{ 
+      <Box sx={{
+        position: 'absolute',
+        width: '400px',
+        height: '400px',
+        background: 'radial-gradient(circle, rgba(16, 185, 129, 0.1) 0%, rgba(16, 185, 129, 0) 70%)',
+        bottom: '-10%',
+        left: '-5%',
+        borderRadius: '50%',
+      }} />
+
+      <Container maxWidth="xs" sx={{ zIndex: 1 }}>
+        <Paper elevation={0} sx={{ 
           p: 4, 
-          textAlign: 'center', 
-          borderRadius: 4,
-          bgcolor: 'rgba(255, 255, 255, 0.85)',
-          backdropFilter: 'blur(10px)',
+          borderRadius: '24px', 
+          bgcolor: 'rgba(255, 255, 255, 0.05)', 
+          backdropFilter: 'blur(16px)',
+          border: '1px solid rgba(255, 255, 255, 0.1)',
+          textAlign: 'center',
+          transition: 'transform 0.3s ease-in-out',
+          '&:hover': {
+            transform: 'translateY(-5px)',
+          }
         }}>
-          <Typography variant="h4" gutterBottom fontWeight="800" color="#2e7d32">
-            Register
+          <Typography variant="h4" fontWeight="900" sx={{ 
+            color: '#fff', 
+            mb: 1, 
+            letterSpacing: '-1px' 
+          }}>
+            Create Account
+          </Typography>
+          <Typography variant="body2" sx={{ color: 'rgba(255,255,255,0.6)', mb: 3 }}>
+            Join our professional task network
           </Typography>
           
-          {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+          {error && (
+            <Alert severity="error" sx={{ mb: 2, borderRadius: '12px', bgcolor: 'rgba(211, 47, 47, 0.1)', color: '#ff8a80' }}>
+              {error}
+            </Alert>
+          )}
           
-          <form onSubmit={handleSignup} autoComplete="off">
-            <Box sx={{ mb: 2, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          <form onSubmit={handleSignup} noValidate>
+            <Box sx={{ mb: 3, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
               <Avatar 
                 src={previewUrl} 
-                sx={{ width: 80, height: 80, mb: 1, border: '2px solid #2e7d32' }} 
+                sx={{ 
+                  width: 80, 
+                  height: 80, 
+                  mb: 1.5, 
+                  border: '2px solid #10b981',
+                  boxShadow: '0 0 15px rgba(16, 185, 129, 0.2)'
+                }} 
               />
               <Button
                 variant="outlined"
                 component="label"
                 size="small"
                 startIcon={<PhotoCamera />}
-                color="success"
+                sx={{ 
+                  borderRadius: '10px', 
+                  color: '#10b981', 
+                  borderColor: '#10b981',
+                  textTransform: 'none',
+                  '&:hover': { borderColor: '#059669', bgcolor: 'rgba(16, 185, 129, 0.05)' }
+                }}
               >
                 Upload Photo
                 <input hidden accept="image/*" type="file" onChange={handleImageChange} />
@@ -125,31 +179,107 @@ const Signup = () => {
             </Box>
 
             <TextField 
-              fullWidth label="Full Name" margin="normal" required 
+              fullWidth label="Full Name" margin="normal" variant="filled" required 
               value={fullName} onChange={(e) => setFullName(e.target.value)} 
-              autoComplete="none"
+              sx={{ 
+                '& .MuiFilledInput-root': { bgcolor: 'rgba(255,255,255,0.05)', borderRadius: '12px', color: '#fff' },
+                '& .MuiInputLabel-root': { color: 'rgba(255,255,255,0.5)' },
+                '& .MuiFilledInput-underline:before': { borderBottom: 'none' },
+                '& .MuiFilledInput-underline:after': { borderBottomColor: '#10b981' },
+                mb: 1
+              }}
             />
             <TextField 
-              fullWidth label="Email Address" margin="normal" type="email" required 
+              fullWidth label="Email Address" margin="normal" variant="filled" type="email" required 
               value={email} onChange={(e) => setEmail(e.target.value)} 
-              autoComplete="none"
+              sx={{ 
+                '& .MuiFilledInput-root': { bgcolor: 'rgba(255,255,255,0.05)', borderRadius: '12px', color: '#fff' },
+                '& .MuiInputLabel-root': { color: 'rgba(255,255,255,0.5)' },
+                '& .MuiFilledInput-underline:before': { borderBottom: 'none' },
+                '& .MuiFilledInput-underline:after': { borderBottomColor: '#10b981' },
+                mb: 1
+              }}
             />
+            
             <TextField 
-              fullWidth label="Password" type="password" margin="normal" required 
+              fullWidth label="Password" 
+              type={showPassword ? 'text' : 'password'} 
+              margin="normal" variant="filled" required 
               value={password} onChange={(e) => setPassword(e.target.value)} 
-              autoComplete="new-password"
+              sx={{ 
+                '& .MuiFilledInput-root': { bgcolor: 'rgba(255,255,255,0.05)', borderRadius: '12px', color: '#fff' },
+                '& .MuiInputLabel-root': { color: 'rgba(255,255,255,0.5)' },
+                '& .MuiFilledInput-underline:before': { borderBottom: 'none' },
+                '& .MuiFilledInput-underline:after': { borderBottomColor: '#10b981' },
+                mb: 1
+              }}
+              InputProps={{
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <IconButton onClick={() => setShowPassword(!showPassword)} edge="end" sx={{ color: 'rgba(255,255,255,0.5)' }}>
+                      {showPassword ? <VisibilityOff /> : <Visibility />}
+                    </IconButton>
+                  </InputAdornment>
+                ),
+              }}
+            />
+
+            <TextField 
+              fullWidth label="Confirm Password" 
+              type={showPassword ? 'text' : 'password'} 
+              margin="normal" variant="filled" required 
+              value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} 
+              sx={{ 
+                '& .MuiFilledInput-root': { bgcolor: 'rgba(255,255,255,0.05)', borderRadius: '12px', color: '#fff' },
+                '& .MuiInputLabel-root': { color: 'rgba(255,255,255,0.5)' },
+                '& .MuiFilledInput-underline:before': { borderBottom: 'none' },
+                '& .MuiFilledInput-underline:after': { borderBottomColor: '#10b981' },
+                mb: 2
+              }}
+              InputProps={{
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <IconButton onClick={() => setShowPassword(!showPassword)} edge="end" sx={{ color: 'rgba(255,255,255,0.5)' }}>
+                      {showPassword ? <VisibilityOff /> : <Visibility />}
+                    </IconButton>
+                  </InputAdornment>
+                ),
+              }}
             />
             
             <Button 
-              fullWidth variant="contained" color="success" type="submit" 
-              disabled={loading} sx={{ mt: 3, py: 1.5, fontWeight: 'bold' }}
+              fullWidth variant="contained" type="submit" 
+              disabled={loading} 
+              sx={{ 
+                mt: 2, 
+                py: 1.8, 
+                borderRadius: '14px', 
+                fontWeight: 'bold',
+                textTransform: 'none',
+                fontSize: '1rem',
+                background: 'linear-gradient(45deg, #10b981, #3b82f6)',
+                boxShadow: '0 10px 20px rgba(16, 185, 129, 0.2)',
+                '&:hover': {
+                  background: 'linear-gradient(45deg, #059669, #2563eb)',
+                  transform: 'scale(1.02)',
+                },
+                transition: 'all 0.2s'
+              }}
             >
-              {loading ? 'Creating Account...' : 'Sign Up'}
+              {loading ? <CircularProgress size={24} color="inherit" /> : 'Create Account'}
             </Button>
           </form>
           
-          <Typography mt={3}>
-            Already a member? <Link href="/login" sx={{ fontWeight: 'bold', textDecoration: 'none' }}>Login</Link>
+          <Typography mt={4} sx={{ color: 'rgba(255,255,255,0.6)' }}>
+            Already a member?{' '}
+            <Link component={RouterLink} to="/login" sx={{ 
+              color: '#3b82f6', 
+              fontWeight: 'bold', 
+              textDecoration: 'none',
+              '&:hover': { textDecoration: 'underline' }
+            }}>
+              Login Here
+            </Link>
           </Typography>
         </Paper>
       </Container>

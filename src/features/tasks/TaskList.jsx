@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import axios from 'axios';
 import {
   Table, TableBody, TableCell, TableContainer,
@@ -13,59 +13,72 @@ import DeleteTask from './DeleteTask';
 import { useDispatch, useSelector } from 'react-redux';
 import { setTasks, setLoading as setReduxLoading } from '../../features/tasks/tasksSlice';
 
+const API_URL = 'https://6996bef77d1786436575294e.mockapi.io/api/tm/tasks';
+
 const TaskList = () => {
-  const [openModal, setOpenModal] = useState(false);
-  const [isEditOpen, setIsEditOpen] = useState(false);
-  const [selectedTask, setSelectedTask] = useState(null);
-  const [filteredTasks, setFilteredTasks] = useState([]);
-  
   const dispatch = useDispatch();
   const tasks = useSelector((state) => state.tasks.items);
   const loading = useSelector((state) => state.tasks.loading);
 
-  const fetchTasks = async () => {
+  const [openModal, setOpenModal] = useState(false);
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [selectedTask, setSelectedTask] = useState(null);
+  const [filteredTasks, setFilteredTasks] = useState([]);
+
+  const fetchTasks = useCallback(async (forceRefresh = false) => {
+    if (!forceRefresh && tasks.length > 0) {
+      setFilteredTasks(tasks);
+      return;
+    }
+
     dispatch(setReduxLoading(true));
     try {
-      const response = await axios.get('https://6996bef77d1786436575294e.mockapi.io/api/tm/tasks');
-      const rawData = response.data || [];
-      
-      const validTasks = rawData.filter(task => {
-        const id = task.id;
-        return id !== null && id !== undefined && id !== '';
-      });
-
+      const { data } = await axios.get(API_URL);
+      const validTasks = (data || []).filter(t => t.id);
       dispatch(setTasks(validTasks));
+      setFilteredTasks(validTasks);
     } catch (error) {
-      console.error("Error fetching data:", error);
+      console.error("Fetch Error:", error);
+    } finally {
       dispatch(setReduxLoading(false));
     }
-  };
+  }, [dispatch, tasks]);
+
+  useEffect(() => {
+    fetchTasks();
+  }, []);
+
+  useEffect(() => {
+    setFilteredTasks(tasks);
+  }, [tasks]);
 
   const handleEditClick = (task) => {
     setSelectedTask(task);
     setIsEditOpen(true);
   };
 
-  useEffect(() => {
-    fetchTasks();
-  }, []);
-
-  if (loading) return (
-    <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '80vh' }}>
-      <CircularProgress thickness={5} size={60} />
+  if (loading && tasks.length === 0) return (
+    <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '60vh' }}>
+      <CircularProgress thickness={4} size={50} sx={{ color: '#6366f1' }} />
     </Box>
   );
 
   return (
-    <Box sx={{ p: { xs: 2, md: 4 }, bgcolor: '#f4f6f8', minHeight: '100vh' }}>
+    <Box sx={{ minHeight: '100vh', py: 4 }}>
       <Container maxWidth="lg">
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+        <Box sx={{ 
+          display: 'flex', 
+          flexDirection: { xs: 'column', sm: 'row' }, 
+          justifyContent: 'space-between', 
+          alignItems: { xs: 'flex-start', sm: 'center' }, 
+          mb: 4, gap: 2 
+        }}>
           <Box>
-            <Typography variant="h5" sx={{ fontWeight: 800, color: '#1a237e', letterSpacing: '0.5px' }}>
-              📋 Task Management Dashboard
+            <Typography variant="h4" sx={{ fontWeight: 900, letterSpacing: '-1px', color: '#fff' }}>
+              Task Dashboard
             </Typography>
-            <Typography variant="body2" color="textSecondary">
-              Viewing {filteredTasks.length} tasks
+            <Typography variant="body2" sx={{ color: 'rgba(255,255,255,0.5)', fontWeight: 500 }}>
+              Showing <span style={{ color: '#6366f1', fontWeight: 'bold' }}>{filteredTasks.length}</span> results
             </Typography>
           </Box>
 
@@ -73,7 +86,14 @@ const TaskList = () => {
             variant="contained"
             startIcon={<AddIcon />}
             onClick={() => setOpenModal(true)}
-            sx={{ bgcolor: '#1a237e', fontWeight: 'bold', borderRadius: 2, px: 3, '&:hover': { bgcolor: '#0d1440' } }}
+            sx={{ 
+              background: 'linear-gradient(45deg, #6366f1, #a855f7)',
+              fontWeight: 'bold', borderRadius: '12px', px: 3, py: 1.2,
+              textTransform: 'none',
+              boxShadow: '0 10px 20px rgba(99, 102, 241, 0.3)',
+              '&:hover': { transform: 'translateY(-2px)', background: 'linear-gradient(45deg, #4f46e5, #9333ea)' },
+              transition: '0.2s'
+            }}
           >
             Create Task
           </Button>
@@ -84,94 +104,83 @@ const TaskList = () => {
         <TableContainer
           component={Paper}
           sx={{
-            boxShadow: '0px 10px 30px rgba(0,0,0,0.1)',
-            borderRadius: 3,
-            overflow: 'hidden',
-            border: '1px solid #e0e0e0'
+            background: 'rgba(255, 255, 255, 0.02)',
+            backdropFilter: 'blur(10px)',
+            borderRadius: '24px',
+            border: '1px solid rgba(255, 255, 255, 0.05)',
+            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)'
           }}
         >
           <Table>
             <TableHead>
-              <TableRow sx={{ bgcolor: '#1a237e' }}>
-                <TableCell sx={{ color: '#fff', fontWeight: 'bold' }}>ID</TableCell>
-                <TableCell sx={{ color: '#fff', fontWeight: 'bold' }}>Task Details</TableCell>
-                <TableCell align="center" sx={{ color: '#fff', fontWeight: 'bold' }}>Status</TableCell>
-                <TableCell align="center" sx={{ color: '#fff', fontWeight: 'bold' }}>Actions</TableCell>
+              <TableRow sx={{ bgcolor: 'rgba(255, 255, 255, 0.02)' }}>
+                {['ID', 'Task Details', 'Status', 'Actions'].map((head) => (
+                  <TableCell key={head} sx={{ color: 'rgba(255,255,255,0.4)', fontWeight: '800', fontSize: '0.7rem', textTransform: 'uppercase' }}>
+                    {head}
+                  </TableCell>
+                ))}
               </TableRow>
             </TableHead>
             <TableBody>
               {filteredTasks.map((task, index) => (
-                <TableRow
-                  key={task.id || index}
-                  hover
-                  sx={{
-                    '&:nth-of-type(even)': { bgcolor: '#fafafa' },
-                    '&:last-child td, &:last-child th': { border: 0 },
-                    transition: '0.3s',
-                    '&:hover': { bgcolor: '#e8eaf6 !important' }
-                  }}
-                >
-                  <TableCell sx={{ fontWeight: 600, color: '#555' }}>
-                    {String(index + 1).padStart(2, '0')}
+                <TableRow key={task.id} sx={{ '&:hover': { bgcolor: 'rgba(255,255,255,0.02)' }, '& td': { borderBottom: '1px solid rgba(255,255,255,0.05)' } }}>
+                  <TableCell sx={{ color: 'rgba(255,255,255,0.2)', fontWeight: 'bold' }}>
+                    #{String(index + 1).padStart(2, '0')}
                   </TableCell>
-
                   <TableCell>
-                    <Typography variant="subtitle2" sx={{ fontWeight: 700, color: '#333' }}>
-                      {task.title || task.task || "No Title"}
+                    <Typography variant="subtitle2" sx={{ 
+                        fontWeight: 700, 
+                        color: task.title ? '#fff' : 'rgba(255,255,255,0.3)',
+                        fontStyle: task.title ? 'normal' : 'italic'
+                    }}>
+                        {task.title || task.task || "Untitled Task"}
                     </Typography>
-                    {task.description && (
-                      <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mt: 0.5 }}>
-                        {task.description}
-                      </Typography>
-                    )}
+                    <Typography variant="caption" sx={{ 
+                        color: 'rgba(255,255,255,0.4)',
+                        display: 'block',
+                        maxWidth: '300px',
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis'
+                    }}>
+                        {task.description || "No description provided for this task."}
+                    </Typography>
                   </TableCell>
-
-                  <TableCell align="center">
-                    <Chip
-                      label={task.status === 'completada' ? 'Completed' : 'Pending'}
-                      color={task.status === 'completada' ? 'success' : 'warning'}
-                      variant="contained"
-                      sx={{ fontWeight: 'bold', minWidth: '100px', fontSize: '0.75rem' }}
+                  <TableCell>
+                    <Chip 
+                      label={task.status === 'completada' ? 'Completed' : 'Pending'} 
+                      size="small"
+                      sx={{ 
+                        fontWeight: 900, fontSize: '0.65rem',
+                        bgcolor: task.status === 'completada' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(245, 158, 11, 0.1)',
+                        color: task.status === 'completada' ? '#10b981' : '#f59e0b',
+                        border: '1px solid currentColor', borderRadius: '6px'
+                      }} 
                     />
                   </TableCell>
-
-                  <TableCell align="center">
-                    <Box sx={{ display: 'flex', justifyContent: 'center', gap: 1 }}>
-                      <IconButton onClick={() => handleEditClick(task)} color="primary" size="small">
-                        <EditIcon fontSize="small" />
+                  <TableCell>
+                    <Box sx={{ display: 'flex', gap: 1 }}>
+                      <IconButton onClick={() => handleEditClick(task)} size="small" sx={{ color: '#6366f1', bgcolor: 'rgba(99, 102, 241, 0.05)' }}>
+                        <EditIcon fontSize="inherit" />
                       </IconButton>
-                      
-                      <DeleteTask 
-                        taskId={task.id} 
-                        onDeleteSuccess={fetchTasks} 
-                      />
+                      <DeleteTask taskId={task.id} onDeleteSuccess={() => fetchTasks(true)} />
                     </Box>
                   </TableCell>
                 </TableRow>
               ))}
-              {filteredTasks.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={4} align="center" sx={{ py: 3 }}>
-                    No tasks found matching your search.
-                  </TableCell>
-                </TableRow>
-              )}
             </TableBody>
           </Table>
+          {filteredTasks.length === 0 && !loading && (
+            <Box sx={{ py: 10, textAlign: 'center', color: 'rgba(255,255,255,0.2)' }}>
+              <Typography variant="body2">No tasks found in your workspace.</Typography>
+            </Box>
+          )}
         </TableContainer>
 
-        <CreateTask
-          open={openModal}
-          handleClose={() => setOpenModal(false)}
-          refreshTasks={fetchTasks}
-        />
-
-        <UpdateTask 
-          open={isEditOpen} 
-          handleClose={() => setIsEditOpen(false)} 
-          taskData={selectedTask}
-          onUpdateSuccess={fetchTasks}
-        />
+        <CreateTask open={openModal} handleClose={() => setOpenModal(false)} refreshTasks={() => fetchTasks(true)} />
+        {selectedTask && (
+          <UpdateTask open={isEditOpen} handleClose={() => setIsEditOpen(false)} taskData={selectedTask} onUpdateSuccess={() => fetchTasks(true)} />
+        )}
       </Container>
     </Box>
   );

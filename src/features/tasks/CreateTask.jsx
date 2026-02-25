@@ -6,97 +6,139 @@ import {
 } from '@mui/material';
 import axios from 'axios';
 
-const style = {
+const API_BASE_URL = 'https://6996bef77d1786436575294e.mockapi.io/api/tm/tasks';
+
+const modalStyle = {
     position: 'absolute',
     top: '50%',
     left: '50%',
     transform: 'translate(-50%, -50%)',
     width: { xs: '90%', sm: 450 },
-    bgcolor: 'background.paper',
-    boxShadow: 24,
+    bgcolor: '#1e293b',
+    border: '1px solid rgba(255, 255, 255, 0.1)',
+    borderRadius: '24px',
+    boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
     p: 4,
-    borderRadius: 3,
+    backdropFilter: 'blur(10px)',
+};
+
+const textFieldStyle = {
+    '& .MuiOutlinedInput-root': {
+        color: '#fff',
+        bgcolor: 'rgba(255, 255, 255, 0.03)',
+        borderRadius: '12px',
+        '& fieldset': { borderColor: 'rgba(255, 255, 255, 0.1)' },
+        '&:hover fieldset': { borderColor: 'rgba(99, 102, 241, 0.5)' },
+        '&.Mui-focused fieldset': { borderColor: '#6366f1' },
+    },
+    '& .MuiInputLabel-root': { color: 'rgba(255, 255, 255, 0.5)' },
+    '& .MuiInputLabel-root.Mui-focused': { color: '#6366f1' },
 };
 
 const CreateTask = ({ open, handleClose, refreshTasks }) => {
-    const [taskTitle, setTaskTitle] = useState('');
-    const [description, setDescription] = useState('');
-    const [status, setStatus] = useState('pendiente');
-    const [localLoading, setLocalLoading] = useState(false);
-    const [showSuccess, setShowSuccess] = useState(false);
+    const [formData, setFormData] = useState({
+        title: '',
+        description: '',
+        status: 'pendiente'
+    });
+    const [loading, setLoading] = useState(false);
+    const [feedback, setFeedback] = useState({ open: false, message: '', severity: 'success' });
+
+    const handleChange = (e) => {
+        const { name, value } = e.target;
+        setFormData(prev => ({ ...prev, [name]: value }));
+    };
+
+    const handleSnackbarClose = () => {
+        setFeedback(prev => ({ ...prev, open: false }));
+    };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        setLocalLoading(true);
-
-        const payload = {
-            title: taskTitle,
-            description: description,
-            status: status
-        };
+        setLoading(true);
 
         try {
-            await axios.post('https://6996bef77d1786436575294e.mockapi.io/api/tm/tasks', payload);
+            await axios.post(API_BASE_URL, formData);
 
-            setTaskTitle('');
-            setDescription('');
-            setStatus('pendiente');
-
+            setFormData({ title: '', description: '', status: 'pendiente' });
             refreshTasks();
-            setShowSuccess(true);
+            setFeedback({ open: true, message: 'Task Added Successfully!', severity: 'success' });
 
-            setTimeout(() => {
-                handleClose();
-            }, 1500);
-
+            setTimeout(handleClose, 1500);
         } catch (error) {
-            console.error("API Error Details:", error.response?.data);
-            alert("Error while adding task!");
+            const errorMsg = error.response?.data || "Error while adding task!";
+            setFeedback({ open: true, message: errorMsg, severity: 'error' });
         } finally {
-            setLocalLoading(false);
+            setLoading(false);
         }
     };
 
     return (
         <>
-            <Modal open={open} onClose={handleClose} closeAfterTransition slots={{ backdrop: Backdrop }}>
+            <Modal 
+                open={open} 
+                onClose={!loading ? handleClose : null} 
+                closeAfterTransition 
+                slots={{ backdrop: Backdrop }}
+                slotProps={{
+                    backdrop: {
+                        sx: { backgroundColor: 'rgba(15, 23, 42, 0.7)', backdropFilter: 'blur(4px)' }
+                    }
+                }}
+            >
                 <Fade in={open}>
-                    <Box sx={style}>
-                        <Typography variant="h6" sx={{ mb: 3, fontWeight: 'bold', color: '#1a237e' }}>
-                            🆕 Add New Task
+                    <Box sx={modalStyle}>
+                        <Typography variant="h5" sx={{ mb: 3, fontWeight: 800, color: '#fff', letterSpacing: '-0.5px' }}>
+                            Add New Task
                         </Typography>
 
                         <form onSubmit={handleSubmit}>
-                            <Stack spacing={2}>
+                            <Stack spacing={3}>
                                 <TextField
                                     fullWidth
                                     label="Task Title"
-                                    variant="outlined"
+                                    name="title"
                                     required
-                                    value={taskTitle}
-                                    onChange={(e) => setTaskTitle(e.target.value)}
-                                    disabled={localLoading}
+                                    value={formData.title}
+                                    onChange={handleChange}
+                                    disabled={loading}
+                                    sx={textFieldStyle}
                                 />
 
                                 <TextField
                                     fullWidth
                                     label="Description"
-                                    variant="outlined"
+                                    name="description"
                                     multiline
-                                    rows={2}
+                                    rows={3}
                                     required
-                                    value={description}
-                                    onChange={(e) => setDescription(e.target.value)}
-                                    disabled={localLoading}
+                                    value={formData.description}
+                                    onChange={handleChange}
+                                    disabled={loading}
+                                    sx={textFieldStyle}
                                 />
 
                                 <TextField
                                     select
                                     fullWidth
                                     label="Status"
-                                    value={status}
-                                    onChange={(e) => setStatus(e.target.value)}
-                                    disabled={localLoading}
+                                    name="status"
+                                    value={formData.status}
+                                    onChange={handleChange}
+                                    disabled={loading}
+                                    sx={textFieldStyle}
+                                    SelectProps={{
+                                        MenuProps: {
+                                            PaperProps: {
+                                                sx: {
+                                                    bgcolor: '#1e293b',
+                                                    color: '#fff',
+                                                    border: '1px solid rgba(255, 255, 255, 0.1)',
+                                                    borderRadius: '12px',
+                                                }
+                                            }
+                                        }
+                                    }}
                                 >
                                     <MenuItem value="pendiente">Pending</MenuItem>
                                     <MenuItem value="completada">Completed</MenuItem>
@@ -106,10 +148,21 @@ const CreateTask = ({ open, handleClose, refreshTasks }) => {
                                     type="submit"
                                     variant="contained"
                                     size="large"
-                                    disabled={localLoading}
-                                    sx={{ bgcolor: '#1a237e', mt: 1, py: 1.5, fontWeight: 'bold' }}
+                                    disabled={loading}
+                                    sx={{ 
+                                        background: 'linear-gradient(45deg, #6366f1, #a855f7)',
+                                        mt: 1, py: 1.5, fontWeight: 'bold',
+                                        borderRadius: '12px',
+                                        textTransform: 'none',
+                                        boxShadow: '0 10px 20px rgba(99, 102, 241, 0.3)',
+                                        '&:hover': { 
+                                            background: 'linear-gradient(45deg, #4f46e5, #9333ea)',
+                                            transform: 'translateY(-2px)' 
+                                        },
+                                        transition: 'all 0.2s'
+                                    }}
                                 >
-                                    {localLoading ? <CircularProgress size={24} color="inherit" /> : 'ADD TO TABLE'}
+                                    {loading ? <CircularProgress size={24} sx={{ color: '#fff' }} /> : 'Create Task'}
                                 </Button>
                             </Stack>
                         </form>
@@ -118,18 +171,18 @@ const CreateTask = ({ open, handleClose, refreshTasks }) => {
             </Modal>
 
             <Snackbar
-                open={showSuccess}
+                open={feedback.open}
                 autoHideDuration={3000}
-                onClose={() => setShowSuccess(false)}
+                onClose={handleSnackbarClose}
                 anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
             >
                 <Alert
-                    onClose={() => setShowSuccess(false)}
-                    severity="success"
+                    onClose={handleSnackbarClose}
+                    severity={feedback.severity}
                     variant="filled"
-                    sx={{ width: '100%', fontWeight: 'bold' }}
+                    sx={{ width: '100%', fontWeight: 'bold', borderRadius: '12px' }}
                 >
-                    ✅ Task Added Successfully!
+                    {feedback.message}
                 </Alert>
             </Snackbar>
         </>
