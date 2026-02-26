@@ -2,7 +2,7 @@ import React, { useState, useCallback } from 'react';
 import {
     Box, TextField, Button, Typography, Paper,
     Container, Snackbar, Alert, InputAdornment,
-    Stack, IconButton
+    Stack, IconButton, useTheme
 } from '@mui/material';
 import { Person, Email, Send, Phone, LocationOn } from '@mui/icons-material';
 import { supabase } from '../config/supabaseClient';
@@ -20,27 +20,7 @@ const MAX_LENGTHS = {
 };
 
 const INITIAL_FORM = { name: '', email: '', message: '' };
-
 const INITIAL_STATUS = { open: false, message: '', severity: 'success' };
-
-const textFieldStyle = {
-    '& .MuiOutlinedInput-root': {
-        color: '#fff',
-        bgcolor: 'rgba(255, 255, 255, 0.03)',
-        borderRadius: '12px',
-        '& fieldset': { borderColor: 'rgba(255, 255, 255, 0.1)' },
-        '&:hover fieldset': { borderColor: 'rgba(99, 102, 241, 0.5)' },
-        '&.Mui-focused fieldset': { borderColor: '#6366f1' },
-    },
-    '& .MuiInputLabel-root': { color: 'rgba(255, 255, 255, 0.5)' },
-    '& .MuiInputLabel-root.Mui-focused': { color: '#6366f1' },
-};
-
-const iconButtonStyle = {
-    bgcolor: 'rgba(255,255,255,0.15)',
-    color: 'white',
-    '&:hover': { bgcolor: 'rgba(255,255,255,0.25)' },
-};
 
 const validators = {
     name: (v) => v.trim().length >= 2 || 'Name must be at least 2 characters.',
@@ -58,10 +38,32 @@ const validate = (formData) => {
 };
 
 const ContactUs = () => {
+    const theme = useTheme();
+    const isDark = theme.palette.mode === 'dark';
+
     const [formData, setFormData] = useState(INITIAL_FORM);
     const [errors, setErrors] = useState({});
     const [loading, setLoading] = useState(false);
     const [status, setStatus] = useState(INITIAL_STATUS);
+
+    const textFieldStyle = {
+        '& .MuiOutlinedInput-root': {
+            color: 'text.primary',
+            bgcolor: isDark ? 'rgba(255, 255, 255, 0.03)' : 'rgba(0, 0, 0, 0.02)',
+            borderRadius: '12px',
+            '& fieldset': { borderColor: 'divider' },
+            '&:hover fieldset': { borderColor: 'primary.main' },
+            '&.Mui-focused fieldset': { borderColor: 'primary.main' },
+        },
+        '& .MuiInputLabel-root': { color: 'text.secondary' },
+        '& .MuiInputLabel-root.Mui-focused': { color: 'primary.main' },
+    };
+
+    const iconButtonStyle = {
+        bgcolor: 'rgba(255,255,255,0.2)',
+        color: 'white',
+        '&:hover': { bgcolor: 'rgba(255,255,255,0.3)' },
+    };
 
     const handleChange = useCallback((field) => (e) => {
         const value = e.target.value;
@@ -112,7 +114,7 @@ const ContactUs = () => {
     const handleCloseStatus = () => setStatus((prev) => ({ ...prev, open: false }));
 
     return (
-        <Box sx={{ py: 10, color: '#fff' }}>
+        <Box sx={{ py: 10, color: 'text.primary' }}>
             <Container maxWidth="lg">
                 <Box sx={{ textAlign: 'center', mb: 8 }}>
                     <Typography variant="h3" sx={{ fontWeight: 900, letterSpacing: '-1.5px', mb: 2 }}>
@@ -120,7 +122,7 @@ const ContactUs = () => {
                     </Typography>
                     <Typography
                         variant="h6"
-                        sx={{ maxWidth: '600px', mx: 'auto', fontWeight: 400, color: 'rgba(255,255,255,0.6)' }}
+                        sx={{ maxWidth: '600px', mx: 'auto', fontWeight: 400, color: 'text.secondary' }}
                     >
                         Have a question or feedback? Fill out the form below and we'll be in touch!
                     </Typography>
@@ -133,15 +135,15 @@ const ContactUs = () => {
                         flexDirection: { xs: 'column', md: 'row' },
                         overflow: 'hidden',
                         borderRadius: '24px',
-                        background: 'rgba(255, 255, 255, 0.03)',
-                        backdropFilter: 'blur(10px)',
-                        border: '1px solid rgba(255, 255, 255, 0.05)',
-                        boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
+                        bgcolor: 'background.paper',
+                        border: '1px solid',
+                        borderColor: 'divider',
+                        boxShadow: isDark ? '0 25px 50px -12px rgba(0, 0, 0, 0.5)' : '0 10px 30px rgba(0,0,0,0.05)',
                     }}
                 >
                     <Box
                         sx={{
-                            background: 'linear-gradient(135deg, #6366f1 0%, #a855f7 100%)',
+                            background: `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${theme.palette.secondary.main} 100%)`,
                             color: 'white',
                             p: 6,
                             width: { xs: '100%', md: '40%' },
@@ -194,7 +196,7 @@ const ContactUs = () => {
                                     InputProps={{
                                         startAdornment: (
                                             <InputAdornment position="start">
-                                                <Person sx={{ color: '#6366f1' }} />
+                                                <Person color="primary" />
                                             </InputAdornment>
                                         ),
                                     }}
@@ -213,7 +215,7 @@ const ContactUs = () => {
                                     InputProps={{
                                         startAdornment: (
                                             <InputAdornment position="start">
-                                                <Email sx={{ color: '#6366f1' }} />
+                                                <Email color="primary" />
                                             </InputAdornment>
                                         ),
                                     }}
@@ -241,15 +243,15 @@ const ContactUs = () => {
                                     disabled={loading}
                                     endIcon={!loading && <Send />}
                                     sx={{
-                                        background: 'linear-gradient(45deg, #6366f1, #a855f7)',
+                                        background: `linear-gradient(45deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,
                                         py: 1.8,
                                         fontWeight: 'bold',
                                         borderRadius: '12px',
                                         textTransform: 'none',
                                         fontSize: '1rem',
-                                        boxShadow: '0 10px 20px rgba(99, 102, 241, 0.3)',
+                                        boxShadow: `0 10px 20px ${theme.palette.primary.main}4D`,
                                         '&:hover': {
-                                            background: 'linear-gradient(45deg, #4f46e5, #9333ea)',
+                                            opacity: 0.9,
                                             transform: 'translateY(-2px)',
                                         },
                                         transition: 'all 0.2s',
@@ -277,7 +279,6 @@ const ContactUs = () => {
                     sx={{
                         borderRadius: '12px',
                         fontWeight: 'bold',
-                        bgcolor: status.severity === 'success' ? '#10b981' : '#ef4444',
                     }}
                 >
                     {status.message}

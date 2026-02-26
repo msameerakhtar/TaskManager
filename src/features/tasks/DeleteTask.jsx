@@ -2,13 +2,16 @@ import React, { useState } from 'react';
 import axios from 'axios';
 import { 
     IconButton, CircularProgress, Snackbar, Alert, Tooltip, 
-    Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions, Button 
+    Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions, Button, useTheme 
 } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
 
 const API_URL = 'https://6996bef77d1786436575294e.mockapi.io/api/tm/tasks';
 
 const DeleteTask = ({ taskId, onDeleteSuccess }) => {
+    const theme = useTheme();
+    const isDark = theme.palette.mode === 'dark';
+    
     const [loading, setLoading] = useState(false);
     const [openDialog, setOpenDialog] = useState(false);
     const [feedback, setFeedback] = useState({ open: false, message: '', severity: 'success' });
@@ -52,16 +55,16 @@ const DeleteTask = ({ taskId, onDeleteSuccess }) => {
                     onClick={handleOpenDialog} 
                     disabled={loading}
                     sx={{ 
-                        color: '#ff4d4d',
+                        color: 'error.main',
                         transition: 'all 0.2s ease',
                         '&:hover': { 
-                            bgcolor: 'rgba(255, 77, 77, 0.1)',
+                            bgcolor: 'error.main' + '1A',
                             transform: 'scale(1.1)' 
                         },
-                        '&.Mui-disabled': { color: 'rgba(255, 77, 77, 0.3)' }
+                        '&.Mui-disabled': { color: 'error.main' + '4D' }
                     }}
                 >
-                    {loading ? <CircularProgress size={20} sx={{ color: '#ff4d4d' }} /> : <DeleteIcon fontSize="small" />}
+                    {loading ? <CircularProgress size={20} sx={{ color: 'error.main' }} /> : <DeleteIcon fontSize="small" />}
                 </IconButton>
             </Tooltip>
 
@@ -70,30 +73,32 @@ const DeleteTask = ({ taskId, onDeleteSuccess }) => {
                 onClose={handleCloseDialog}
                 PaperProps={{
                     sx: {
-                        bgcolor: '#1e293b',
-                        color: '#fff',
+                        bgcolor: 'background.paper',
+                        color: 'text.primary',
                         borderRadius: '20px',
-                        border: '1px solid rgba(255,255,255,0.1)',
-                        p: 1
+                        border: '1px solid',
+                        borderColor: 'divider',
+                        p: 1,
+                        backgroundImage: 'none'
                     }
                 }}
             >
                 <DialogTitle sx={{ fontWeight: 800 }}>Confirm Delete</DialogTitle>
                 <DialogContent>
-                    <DialogContentText sx={{ color: 'rgba(255,255,255,0.7)' }}>
+                    <DialogContentText sx={{ color: 'text.secondary' }}>
                         Are you sure you want to permanently delete this task? This action cannot be undone.
                     </DialogContentText>
                 </DialogContent>
                 <DialogActions sx={{ p: 3 }}>
-                    <Button onClick={handleCloseDialog} sx={{ color: 'rgba(255,255,255,0.5)', textTransform: 'none' }}>
+                    <Button onClick={handleCloseDialog} sx={{ color: 'text.secondary', textTransform: 'none' }}>
                         Cancel
                     </Button>
                     <Button 
                         onClick={handleDelete} 
                         variant="contained" 
                         sx={{ 
-                            bgcolor: '#ff4d4d', 
-                            '&:hover': { bgcolor: '#d32f2f' },
+                            bgcolor: 'error.main', 
+                            '&:hover': { bgcolor: 'error.dark' },
                             borderRadius: '10px',
                             textTransform: 'none',
                             px: 3

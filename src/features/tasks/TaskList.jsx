@@ -1,8 +1,8 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import {
   Table, TableBody, TableCell, TableContainer,
-  TableHead, TableRow, Paper, Typography, CircularProgress, Box, Chip, Button, Container, IconButton
+  TableHead, TableRow, Paper, Typography, CircularProgress, Box, Chip, Button, Container, IconButton, useTheme
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
@@ -16,6 +16,8 @@ import { setTasks, setLoading as setReduxLoading } from '../../features/tasks/ta
 const API_URL = 'https://6996bef77d1786436575294e.mockapi.io/api/tm/tasks';
 
 const TaskList = () => {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === 'dark';
   const dispatch = useDispatch();
   const tasks = useSelector((state) => state.tasks.items);
   const loading = useSelector((state) => state.tasks.loading);
@@ -25,12 +27,7 @@ const TaskList = () => {
   const [selectedTask, setSelectedTask] = useState(null);
   const [filteredTasks, setFilteredTasks] = useState([]);
 
-  const fetchTasks = useCallback(async (forceRefresh = false) => {
-    if (!forceRefresh && tasks.length > 0) {
-      setFilteredTasks(tasks);
-      return;
-    }
-
+  const fetchTasks = async () => {
     dispatch(setReduxLoading(true));
     try {
       const { data } = await axios.get(API_URL);
@@ -42,7 +39,7 @@ const TaskList = () => {
     } finally {
       dispatch(setReduxLoading(false));
     }
-  }, [dispatch, tasks]);
+  };
 
   useEffect(() => {
     fetchTasks();
@@ -59,12 +56,12 @@ const TaskList = () => {
 
   if (loading && tasks.length === 0) return (
     <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '60vh' }}>
-      <CircularProgress thickness={4} size={50} sx={{ color: '#6366f1' }} />
+      <CircularProgress thickness={4} size={50} sx={{ color: 'primary.main' }} />
     </Box>
   );
 
   return (
-    <Box sx={{ minHeight: '100vh', py: 4 }}>
+    <Box sx={{ minHeight: '100vh', py: 4, bgcolor: 'background.default', transition: 'background-color 0.3s' }}>
       <Container maxWidth="lg">
         <Box sx={{ 
           display: 'flex', 
@@ -74,11 +71,11 @@ const TaskList = () => {
           mb: 4, gap: 2 
         }}>
           <Box>
-            <Typography variant="h4" sx={{ fontWeight: 900, letterSpacing: '-1px', color: '#fff' }}>
+            <Typography variant="h4" sx={{ fontWeight: 900, letterSpacing: '-1px', color: 'text.primary' }}>
               Task Dashboard
             </Typography>
-            <Typography variant="body2" sx={{ color: 'rgba(255,255,255,0.5)', fontWeight: 500 }}>
-              Showing <span style={{ color: '#6366f1', fontWeight: 'bold' }}>{filteredTasks.length}</span> results
+            <Typography variant="body2" sx={{ color: 'text.secondary', fontWeight: 500 }}>
+              Showing <span style={{ color: theme.palette.primary.main, fontWeight: 'bold' }}>{filteredTasks.length}</span> results
             </Typography>
           </Box>
 
@@ -87,11 +84,11 @@ const TaskList = () => {
             startIcon={<AddIcon />}
             onClick={() => setOpenModal(true)}
             sx={{ 
-              background: 'linear-gradient(45deg, #6366f1, #a855f7)',
+              background: `linear-gradient(45deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,
               fontWeight: 'bold', borderRadius: '12px', px: 3, py: 1.2,
               textTransform: 'none',
-              boxShadow: '0 10px 20px rgba(99, 102, 241, 0.3)',
-              '&:hover': { transform: 'translateY(-2px)', background: 'linear-gradient(45deg, #4f46e5, #9333ea)' },
+              boxShadow: `0 10px 20px ${theme.palette.primary.main}4D`,
+              '&:hover': { transform: 'translateY(-2px)', opacity: 0.9 },
               transition: '0.2s'
             }}
           >
@@ -104,18 +101,20 @@ const TaskList = () => {
         <TableContainer
           component={Paper}
           sx={{
-            background: 'rgba(255, 255, 255, 0.02)',
+            background: 'background.paper',
             backdropFilter: 'blur(10px)',
             borderRadius: '24px',
-            border: '1px solid rgba(255, 255, 255, 0.05)',
-            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)'
+            border: '1px solid',
+            borderColor: 'divider',
+            boxShadow: isDark ? '0 25px 50px -12px rgba(0, 0, 0, 0.5)' : '0 25px 50px -12px rgba(0, 0, 0, 0.05)',
+            backgroundImage: 'none'
           }}
         >
           <Table>
             <TableHead>
-              <TableRow sx={{ bgcolor: 'rgba(255, 255, 255, 0.02)' }}>
+              <TableRow sx={{ bgcolor: isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)' }}>
                 {['ID', 'Task Details', 'Status', 'Actions'].map((head) => (
-                  <TableCell key={head} sx={{ color: 'rgba(255,255,255,0.4)', fontWeight: '800', fontSize: '0.7rem', textTransform: 'uppercase' }}>
+                  <TableCell key={head} sx={{ color: 'text.secondary', fontWeight: '800', fontSize: '0.7rem', textTransform: 'uppercase', borderBottom: '1px solid', borderColor: 'divider' }}>
                     {head}
                   </TableCell>
                 ))}
@@ -123,20 +122,20 @@ const TaskList = () => {
             </TableHead>
             <TableBody>
               {filteredTasks.map((task, index) => (
-                <TableRow key={task.id} sx={{ '&:hover': { bgcolor: 'rgba(255,255,255,0.02)' }, '& td': { borderBottom: '1px solid rgba(255,255,255,0.05)' } }}>
-                  <TableCell sx={{ color: 'rgba(255,255,255,0.2)', fontWeight: 'bold' }}>
+                <TableRow key={task.id} sx={{ '&:hover': { bgcolor: isDark ? 'rgba(255,255,255,0.01)' : 'rgba(0,0,0,0.01)' } }}>
+                  <TableCell sx={{ color: 'text.secondary', fontWeight: 'bold', borderBottom: '1px solid', borderColor: 'divider' }}>
                     #{String(index + 1).padStart(2, '0')}
                   </TableCell>
-                  <TableCell>
+                  <TableCell sx={{ borderBottom: '1px solid', borderColor: 'divider' }}>
                     <Typography variant="subtitle2" sx={{ 
                         fontWeight: 700, 
-                        color: task.title ? '#fff' : 'rgba(255,255,255,0.3)',
+                        color: task.title ? 'text.primary' : 'text.secondary',
                         fontStyle: task.title ? 'normal' : 'italic'
                     }}>
                         {task.title || task.task || "Untitled Task"}
                     </Typography>
                     <Typography variant="caption" sx={{ 
-                        color: 'rgba(255,255,255,0.4)',
+                        color: 'text.secondary',
                         display: 'block',
                         maxWidth: '300px',
                         whiteSpace: 'nowrap',
@@ -146,24 +145,24 @@ const TaskList = () => {
                         {task.description || "No description provided for this task."}
                     </Typography>
                   </TableCell>
-                  <TableCell>
+                  <TableCell sx={{ borderBottom: '1px solid', borderColor: 'divider' }}>
                     <Chip 
                       label={task.status === 'completada' ? 'Completed' : 'Pending'} 
                       size="small"
                       sx={{ 
                         fontWeight: 900, fontSize: '0.65rem',
-                        bgcolor: task.status === 'completada' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(245, 158, 11, 0.1)',
-                        color: task.status === 'completada' ? '#10b981' : '#f59e0b',
+                        bgcolor: task.status === 'completada' ? 'success.main' + '1A' : 'warning.main' + '1A',
+                        color: task.status === 'completada' ? 'success.main' : 'warning.main',
                         border: '1px solid currentColor', borderRadius: '6px'
                       }} 
                     />
                   </TableCell>
-                  <TableCell>
+                  <TableCell sx={{ borderBottom: '1px solid', borderColor: 'divider' }}>
                     <Box sx={{ display: 'flex', gap: 1 }}>
-                      <IconButton onClick={() => handleEditClick(task)} size="small" sx={{ color: '#6366f1', bgcolor: 'rgba(99, 102, 241, 0.05)' }}>
+                      <IconButton onClick={() => handleEditClick(task)} size="small" sx={{ color: 'primary.main', bgcolor: 'primary.main' + '0D' }}>
                         <EditIcon fontSize="inherit" />
                       </IconButton>
-                      <DeleteTask taskId={task.id} onDeleteSuccess={() => fetchTasks(true)} />
+                      <DeleteTask taskId={task.id} onDeleteSuccess={fetchTasks} />
                     </Box>
                   </TableCell>
                 </TableRow>
@@ -171,15 +170,15 @@ const TaskList = () => {
             </TableBody>
           </Table>
           {filteredTasks.length === 0 && !loading && (
-            <Box sx={{ py: 10, textAlign: 'center', color: 'rgba(255,255,255,0.2)' }}>
+            <Box sx={{ py: 10, textAlign: 'center', color: 'text.secondary' }}>
               <Typography variant="body2">No tasks found in your workspace.</Typography>
             </Box>
           )}
         </TableContainer>
 
-        <CreateTask open={openModal} handleClose={() => setOpenModal(false)} refreshTasks={() => fetchTasks(true)} />
+        <CreateTask open={openModal} handleClose={() => setOpenModal(false)} refreshTasks={fetchTasks} />
         {selectedTask && (
-          <UpdateTask open={isEditOpen} handleClose={() => setIsEditOpen(false)} taskData={selectedTask} onUpdateSuccess={() => fetchTasks(true)} />
+          <UpdateTask open={isEditOpen} handleClose={() => setIsEditOpen(false)} taskData={selectedTask} onUpdateSuccess={fetchTasks} />
         )}
       </Container>
     </Box>

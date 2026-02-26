@@ -1,15 +1,20 @@
 import React, { useState } from 'react';
 import { 
   TextField, Button, Typography, Paper, Container, 
-  Box, Link, Alert, CircularProgress, InputAdornment, IconButton 
+  Box, Link, Alert, CircularProgress, InputAdornment, IconButton, useTheme 
 } from '@mui/material';
 import { Visibility, VisibilityOff } from '@mui/icons-material';
+import LightModeIcon from '@mui/icons-material/LightMode';
+import DarkModeIcon from '@mui/icons-material/DarkMode';
 import { useNavigate, Link as RouterLink } from 'react-router-dom';
 import { supabase } from '../../config/supabaseClient';
 import { useDispatch } from 'react-redux';
 import { login } from '../auth/authSlice';
 
-const Login = () => {
+const Login = ({ mode, setMode }) => {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === 'dark';
+  
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -52,15 +57,23 @@ const Login = () => {
       minHeight: '100vh', 
       display: 'flex', 
       alignItems: 'center', 
-      background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
+      bgcolor: 'background.default',
       position: 'relative',
-      overflow: 'hidden'
+      overflow: 'hidden',
+      transition: 'background-color 0.3s ease'
     }}>
+      <IconButton 
+        onClick={() => setMode(isDark ? 'light' : 'dark')} 
+        sx={{ position: 'absolute', top: 20, right: 20, zIndex: 10 }}
+      >
+        {isDark ? <LightModeIcon sx={{ color: '#fbbf24' }} /> : <DarkModeIcon sx={{ color: '#6366f1' }} />}
+      </IconButton>
+
       <Box sx={{
         position: 'absolute',
         width: '300px',
         height: '300px',
-        background: 'radial-gradient(circle, rgba(99,102,241,0.15) 0%, rgba(99,102,241,0) 70%)',
+        background: `radial-gradient(circle, ${theme.palette.primary.main}26 0%, transparent 70%)`,
         top: '-10%',
         right: '-5%',
         borderRadius: '50%',
@@ -70,76 +83,48 @@ const Login = () => {
         <Paper elevation={0} sx={{ 
           p: 5, 
           borderRadius: '24px', 
-          bgcolor: 'rgba(255, 255, 255, 0.05)', 
+          bgcolor: 'background.paper', 
           backdropFilter: 'blur(16px)',
-          border: '1px solid rgba(255, 255, 255, 0.1)',
+          border: '1px solid',
+          borderColor: 'divider',
           textAlign: 'center',
-          transition: 'transform 0.3s ease-in-out',
+          transition: 'all 0.3s ease-in-out',
           '&:hover': {
             transform: 'translateY(-5px)',
+            boxShadow: isDark ? '0 20px 40px rgba(0,0,0,0.4)' : '0 20px 40px rgba(0,0,0,0.1)',
           }
         }}>
-          <Typography variant="h4" fontWeight="900" sx={{ 
-            color: '#fff', 
-            mb: 1, 
-            letterSpacing: '-1px' 
-          }}>
-            Login
-          </Typography>
-          <Typography variant="body2" sx={{ color: 'rgba(255,255,255,0.6)', mb: 4 }}>
-            Please enter your details to sign in
-          </Typography>
+          <Typography variant="h4" fontWeight="900" sx={{ color: 'text.primary', mb: 1, letterSpacing: '-1px' }}>Login</Typography>
+          <Typography variant="body2" sx={{ color: 'text.secondary', mb: 4 }}>Please enter your details to sign in</Typography>
           
           {error && (
-            <Alert 
-              severity="error" 
-              sx={{ 
-                mb: 3, 
-                borderRadius: '12px', 
-                bgcolor: 'rgba(211, 47, 47, 0.1)', 
-                color: '#ff8a80',
-                '& .MuiAlert-icon': { color: '#ff8a80' }
-              }}
-            >
+            <Alert severity="error" sx={{ mb: 3, borderRadius: '12px', bgcolor: 'error.main' + '1A', color: 'error.main' }}>
               {error}
             </Alert>
           )}
           
           <form onSubmit={handleLogin} noValidate>
             <TextField 
-              fullWidth 
-              label="Email Address" 
-              margin="normal" 
-              variant="filled"
-              value={email} 
-              onChange={(e) => setEmail(e.target.value)}
+              fullWidth label="Email Address" margin="normal" variant="filled"
+              value={email} onChange={(e) => setEmail(e.target.value)}
               sx={{ 
-                '& .MuiFilledInput-root': { bgcolor: 'rgba(255,255,255,0.05)', borderRadius: '12px', color: '#fff' },
-                '& .MuiInputLabel-root': { color: 'rgba(255,255,255,0.5)' },
+                '& .MuiFilledInput-root': { bgcolor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)', borderRadius: '12px', color: 'text.primary' },
                 '& .MuiFilledInput-underline:before': { borderBottom: 'none' },
-                '& .MuiFilledInput-underline:after': { borderBottomColor: '#6366f1' },
                 mb: 1
               }}
             />
             <TextField 
-              fullWidth 
-              label="Password" 
-              type={showPassword ? 'text' : 'password'}
-              margin="normal" 
-              variant="filled"
-              value={password} 
-              onChange={(e) => setPassword(e.target.value)}
+              fullWidth label="Password" type={showPassword ? 'text' : 'password'}
+              margin="normal" variant="filled" value={password} onChange={(e) => setPassword(e.target.value)}
               sx={{ 
-                '& .MuiFilledInput-root': { bgcolor: 'rgba(255,255,255,0.05)', borderRadius: '12px', color: '#fff' },
-                '& .MuiInputLabel-root': { color: 'rgba(255,255,255,0.5)' },
+                '& .MuiFilledInput-root': { bgcolor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)', borderRadius: '12px', color: 'text.primary' },
                 '& .MuiFilledInput-underline:before': { borderBottom: 'none' },
-                '& .MuiFilledInput-underline:after': { borderBottomColor: '#6366f1' },
                 mb: 2
               }}
               InputProps={{
                 endAdornment: (
                   <InputAdornment position="end">
-                    <IconButton onClick={() => setShowPassword(!showPassword)} edge="end" sx={{ color: 'rgba(255,255,255,0.5)' }}>
+                    <IconButton onClick={() => setShowPassword(!showPassword)} edge="end">
                       {showPassword ? <VisibilityOff /> : <Visibility />}
                     </IconButton>
                   </InputAdornment>
@@ -147,38 +132,20 @@ const Login = () => {
               }}
             />
             <Button 
-              fullWidth 
-              variant="contained" 
-              type="submit" 
-              disabled={loading} 
+              fullWidth variant="contained" type="submit" disabled={loading} 
               sx={{ 
-                mt: 2, 
-                py: 1.8, 
-                borderRadius: '14px', 
-                fontWeight: 'bold',
-                textTransform: 'none',
-                fontSize: '1rem',
-                background: 'linear-gradient(45deg, #6366f1, #8b5cf6)',
-                boxShadow: '0 10px 20px rgba(99, 102, 241, 0.3)',
-                '&:hover': {
-                  background: 'linear-gradient(45deg, #4f46e5, #7c3aed)',
-                  transform: 'scale(1.02)',
-                },
-                transition: 'all 0.2s'
+                mt: 2, py: 1.8, borderRadius: '14px', fontWeight: 'bold', textTransform: 'none',
+                background: `linear-gradient(45deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,
+                boxShadow: `0 10px 20px ${theme.palette.primary.main}4D`
               }}
             >
               {loading ? <CircularProgress size={24} color="inherit" /> : 'Sign In'}
             </Button>
           </form>
           
-          <Typography sx={{ mt: 4, color: 'rgba(255,255,255,0.6)' }}>
+          <Typography sx={{ mt: 4, color: 'text.secondary' }}>
             New here?{' '}
-            <Link component={RouterLink} to="/signup" sx={{ 
-              color: '#818cf8', 
-              fontWeight: 'bold', 
-              textDecoration: 'none',
-              '&:hover': { textDecoration: 'underline' }
-            }}>
+            <Link component={RouterLink} to="/signup" sx={{ color: 'primary.main', fontWeight: 'bold', textDecoration: 'none' }}>
               Create an account
             </Link>
           </Typography>

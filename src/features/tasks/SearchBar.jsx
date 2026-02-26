@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { TextField, InputAdornment, Box } from '@mui/material';
+import { TextField, InputAdornment, Box, useTheme } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 
 const SearchBar = ({ tasks, onFilter }) => {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === 'dark';
   const [searchTerm, setSearchTerm] = useState('');
 
   const handleSearch = useCallback(() => {
@@ -39,32 +41,32 @@ const SearchBar = ({ tasks, onFilter }) => {
         onChange={(e) => setSearchTerm(e.target.value)}
         sx={{
           '& .MuiOutlinedInput-root': {
-            bgcolor: 'rgba(255, 255, 255, 0.03)',
+            bgcolor: isDark ? 'rgba(255, 255, 255, 0.03)' : 'rgba(0, 0, 0, 0.02)',
             borderRadius: '16px',
-            color: '#fff',
+            color: 'text.primary',
             transition: 'all 0.3s ease',
             backdropFilter: 'blur(10px)',
             '& fieldset': { 
-              borderColor: 'rgba(255, 255, 255, 0.1)',
+              borderColor: 'divider',
               borderRadius: '16px',
             },
             '&:hover fieldset': { 
-              borderColor: 'rgba(99, 102, 241, 0.5)',
+              borderColor: 'primary.main',
             },
             '&.Mui-focused fieldset': { 
-              borderColor: '#6366f1',
+              borderColor: 'primary.main',
               borderWidth: '1px'
             },
           },
           '& .MuiInputBase-input::placeholder': {
-            color: 'rgba(255, 255, 255, 0.4)',
-            opacity: 1,
+            color: 'text.secondary',
+            opacity: 0.7,
           }
         }}
         InputProps={{
           startAdornment: (
             <InputAdornment position="start">
-              <SearchIcon sx={{ color: '#6366f1', ml: 1 }} />
+              <SearchIcon sx={{ color: 'primary.main', ml: 1 }} />
             </InputAdornment>
           ),
         }}

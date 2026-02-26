@@ -1,5 +1,5 @@
 import React from 'react';
-import { Grid, Card, CardContent, CardMedia, Typography, Container, Button, Box, Divider } from '@mui/material';
+import { Grid, Card, CardContent, CardMedia, Typography, Container, Button, Box, Divider, useTheme } from '@mui/material';
 
 const POSTS = [
     { title: 'Mastering Productivity', desc: 'Tips to manage your daily tasks.', img: 'https://images.unsplash.com/photo-1484480974693-6ca0a78fb36b?w=500', link: 'https://medium.com/topic/productivity' },
@@ -10,31 +10,42 @@ const POSTS = [
     { title: 'Web Performance', desc: 'Optimizing your app for speed and SEO.', img: 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=500', link: 'https://web.dev/blog/' },
 ];
 
-const cardStyle = {
-    display: 'flex',
-    flexDirection: 'column',
-    height: '100%',
-    bgcolor: 'rgba(255, 255, 255, 0.03)',
-    backdropFilter: 'blur(10px)',
-    borderRadius: '24px',
-    border: '1px solid rgba(255, 255, 255, 0.05)',
-    boxShadow: '0 20px 40px rgba(0,0,0,0.3)',
-    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-    '&:hover': {
-        transform: 'translateY(-10px)',
-        border: '1px solid rgba(99, 102, 241, 0.4)',
-        boxShadow: '0 30px 60px rgba(0,0,0,0.4)',
-    }
-};
-
 const Blog = () => {
+    const theme = useTheme();
+    const isDark = theme.palette.mode === 'dark';
+
+    const cardStyle = {
+        display: 'flex',
+        flexDirection: 'column',
+        height: '100%',
+        bgcolor: 'background.paper',
+        backdropFilter: 'blur(10px)',
+        borderRadius: '24px',
+        border: '1px solid',
+        borderColor: 'divider',
+        boxShadow: isDark ? '0 20px 40px rgba(0,0,0,0.3)' : '0 10px 30px rgba(0,0,0,0.05)',
+        transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+        backgroundImage: 'none',
+        '&:hover': {
+            transform: 'translateY(-10px)',
+            borderColor: 'primary.main',
+            boxShadow: isDark ? '0 30px 60px rgba(0,0,0,0.4)' : '0 20px 40px rgba(0,0,0,0.1)',
+        }
+    };
+
     return (
         <Container component="section" maxWidth="lg" sx={{ py: 8 }}>
             <Box sx={{ mb: 8, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                <Typography component="h1" variant="h3" textAlign="center" sx={{ fontWeight: 900, color: '#fff', letterSpacing: '-1.5px', mb: 2 }}>
+                <Typography component="h1" variant="h3" textAlign="center" sx={{ fontWeight: 900, color: 'text.primary', letterSpacing: '-1.5px', mb: 2 }}>
                     Latest Tech Blogs
                 </Typography>
-                <Divider sx={{ width: '80px', height: '4px', background: 'linear-gradient(45deg, #6366f1, #a855f7)', borderRadius: '10px', border: 'none' }} />
+                <Divider sx={{ 
+                    width: '80px', 
+                    height: '4px', 
+                    background: `linear-gradient(45deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`, 
+                    borderRadius: '10px', 
+                    border: 'none' 
+                }} />
             </Box>
 
             <Grid container spacing={4}>
@@ -61,10 +72,10 @@ const Blog = () => {
                             </Box>
                             
                             <CardContent sx={{ flexGrow: 1 }}>
-                                <Typography variant="h6" component="h2" sx={{ fontWeight: 800, color: '#6366f1', mb: 1.5, lineHeight: 1.2 }}>
+                                <Typography variant="h6" component="h2" sx={{ fontWeight: 800, color: 'primary.main', mb: 1.5, lineHeight: 1.2 }}>
                                     {post.title}
                                 </Typography>
-                                <Typography variant="body2" sx={{ color: 'rgba(255,255,255,0.6)', lineHeight: 1.7 }}>
+                                <Typography variant="body2" sx={{ color: 'text.secondary', lineHeight: 1.7 }}>
                                     {post.desc}
                                 </Typography>
                             </CardContent>
@@ -80,11 +91,11 @@ const Blog = () => {
                                         borderRadius: '12px',
                                         textTransform: 'none',
                                         fontWeight: 700,
-                                        color: '#fff',
-                                        borderColor: 'rgba(255, 255, 255, 0.2)',
+                                        color: 'text.primary',
+                                        borderColor: 'divider',
                                         '&:hover': {
-                                            borderColor: '#6366f1',
-                                            bgcolor: 'rgba(99, 102, 241, 0.1)',
+                                            borderColor: 'primary.main',
+                                            bgcolor: 'primary.main' + '0D',
                                         }
                                     }}
                                 >

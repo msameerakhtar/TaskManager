@@ -1,8 +1,11 @@
 import React from 'react';
-import { Paper, Typography, Avatar, Box, Divider, Container } from '@mui/material';
+import { Paper, Typography, Avatar, Box, Divider, Container, useTheme } from '@mui/material';
 import { useSelector } from 'react-redux';
 
 const Profile = () => {
+    const theme = useTheme();
+    const isDark = theme.palette.mode === 'dark';
+    
     const user = useSelector((state) => state.auth.user);
     const fullName = user?.user_metadata?.full_name || "User";
     const email = user?.email || "N/A";
@@ -15,11 +18,13 @@ const Profile = () => {
                 sx={{ 
                     p: 6, 
                     textAlign: 'center',
-                    background: 'rgba(255, 255, 255, 0.03)',
+                    bgcolor: 'background.paper',
                     backdropFilter: 'blur(10px)',
                     borderRadius: '32px',
-                    border: '1px solid rgba(255, 255, 255, 0.05)',
-                    boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)'
+                    border: '1px solid',
+                    borderColor: 'divider',
+                    boxShadow: isDark ? '0 25px 50px -12px rgba(0, 0, 0, 0.5)' : '0 10px 30px rgba(0,0,0,0.05)',
+                    backgroundImage: 'none'
                 }}
             >
                 <Box sx={{ position: 'relative', display: 'inline-block', mb: 3 }}>
@@ -29,11 +34,12 @@ const Profile = () => {
                             width: 140, 
                             height: 140, 
                             mx: 'auto', 
-                            bgcolor: '#6366f1', 
+                            bgcolor: 'primary.main', 
                             fontSize: '3.5rem', 
                             fontWeight: 800,
-                            border: '4px solid rgba(99, 102, 241, 0.2)',
-                            boxShadow: '0 0 30px rgba(99, 102, 241, 0.3)'
+                            border: '4px solid',
+                            borderColor: 'primary.light',
+                            boxShadow: `0 0 30px ${theme.palette.primary.main}4D`
                         }}
                     >
                         {fullName.charAt(0).toUpperCase()}
@@ -46,18 +52,19 @@ const Profile = () => {
                         height: 20,
                         bgcolor: '#10b981',
                         borderRadius: '50%',
-                        border: '3px solid #0f172a'
+                        border: '3px solid',
+                        borderColor: 'background.paper'
                     }} />
                 </Box>
 
-                <Typography variant="h4" sx={{ fontWeight: 900, color: '#fff', mb: 1, letterSpacing: '-1px' }}>
+                <Typography variant="h4" sx={{ fontWeight: 900, color: 'text.primary', mb: 1, letterSpacing: '-1px' }}>
                     {fullName}
                 </Typography>
-                <Typography sx={{ color: 'rgba(255,255,255,0.5)', mb: 4, fontWeight: 500 }}>
+                <Typography sx={{ color: 'text.secondary', mb: 4, fontWeight: 500 }}>
                     {email}
                 </Typography>
 
-                <Divider sx={{ mb: 4, borderColor: 'rgba(255,255,255,0.05)' }} />
+                <Divider sx={{ mb: 4, borderColor: 'divider' }} />
 
                 <Box sx={{ 
                     display: 'flex', 
@@ -66,15 +73,16 @@ const Profile = () => {
                     textAlign: 'left'
                 }}>
                     <Box sx={{ 
-                        bgcolor: 'rgba(99, 102, 241, 0.05)', 
+                        bgcolor: 'primary.main' + '0D', 
                         p: 2.5, 
                         borderRadius: '16px',
-                        border: '1px solid rgba(99, 102, 241, 0.1)',
+                        border: '1px solid',
+                        borderColor: 'primary.main' + '1A',
                         display: 'flex',
                         justifyContent: 'space-between',
                         alignItems: 'center'
                     }}>
-                        <Typography variant="body2" sx={{ color: 'rgba(255,255,255,0.6)', fontWeight: 600 }}>
+                        <Typography variant="body2" sx={{ color: 'text.secondary', fontWeight: 600 }}>
                             Account Status
                         </Typography>
                         <Typography variant="body2" sx={{ color: '#10b981', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '1px' }}>
@@ -83,18 +91,19 @@ const Profile = () => {
                     </Box>
 
                     <Box sx={{ 
-                        bgcolor: 'rgba(255, 255, 255, 0.02)', 
+                        bgcolor: isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)', 
                         p: 2.5, 
                         borderRadius: '16px',
-                        border: '1px solid rgba(255, 255, 255, 0.05)',
+                        border: '1px solid',
+                        borderColor: 'divider',
                         display: 'flex',
                         justifyContent: 'space-between',
                         alignItems: 'center'
                     }}>
-                        <Typography variant="body2" sx={{ color: 'rgba(255,255,255,0.6)', fontWeight: 600 }}>
+                        <Typography variant="body2" sx={{ color: 'text.secondary', fontWeight: 600 }}>
                             Role
                         </Typography>
-                        <Typography variant="body2" sx={{ color: '#fff', fontWeight: 700 }}>
+                        <Typography variant="body2" sx={{ color: 'text.primary', fontWeight: 700 }}>
                             Administrator
                         </Typography>
                     </Box>

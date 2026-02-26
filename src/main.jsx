@@ -4,16 +4,11 @@ import './index.css';
 import App from './App.jsx';
 import { Provider } from 'react-redux';
 import { store } from './app/store.js';
-import { ThemeProvider, CssBaseline } from '@mui/material';
-import theme from './theme'; 
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <Provider store={store}>
-      <ThemeProvider theme={theme}>
-        <CssBaseline /> 
-        <App />
-      </ThemeProvider>
+      <App />
     </Provider>
   </StrictMode>
 );
