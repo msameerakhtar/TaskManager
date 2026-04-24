@@ -1,0 +1,124 @@
+import React, { useState, useEffect } from 'react';
+import { 
+  TextField, Button, Typography, Paper, Container, 
+  Box, Link, Alert, Avatar, CircularProgress, InputAdornment, IconButton, useTheme 
+} from '@mui/material';
+import { PhotoCamera, Visibility, VisibilityOff } from '@mui/icons-material';
+import LightModeIcon from '@mui/icons-material/LightMode';
+import DarkModeIcon from '@mui/icons-material/DarkMode';
+import { useNavigate, Link as RouterLink } from 'react-router-dom';
+import { supabase } from '../../config/supabaseClient';
+import { useDispatch } from 'react-redux';
+import { login } from '../auth/authSlice';
+
+const Signup = ({ mode, setMode }) => {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === 'dark';
+  
+  const [fullName, setFullName] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [imageFile, setImageFile] = useState(null);
+  const [previewUrl, setPreviewUrl] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+  
+  const navigate = useNavigate();
+  const dispatch = useDispatch();
+
+  useEffect(() => {
+    return () => { if (previewUrl) URL.revokeObjectURL(previewUrl); };
+  }, [previewUrl]);
+
+  const handleImageChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+      setImageFile(file);
+      setPreviewUrl(URL.createObjectURL(file));
+    }
+  };
+
+  const handleSignup = async (e) => {
+    e.preventDefault();
+    setError('');
+    if (password !== confirmPassword) return setError("Passwords do not match.");
+    setLoading(true);
+
+    try {
+      let avatarUrl = "";
+      if (imageFile) {
+        const fileExt = imageFile.name.split('.').pop();
+        const fileName = `${Date.now()}.${fileExt}`;
+        const { error: uploadError } = await supabase.storage.from('avatars').upload(fileName, imageFile);
+        if (uploadError) throw uploadError;
+        avatarUrl = supabase.storage.from('avatars').getPublicUrl(fileName).data.publicUrl;
+      }
+
+      const { data, error: signupError } = await supabase.auth.signUp({
+        email: email.trim(),
+        password,
+        options: { data: { full_name: fullName.trim(), avatar_url: avatarUrl } },
+      });
+
+      if (signupError) throw signupError;
+      if (data.session) {
+        dispatch(login({ user: data.session.user, token: data.session.access_token }));
+        navigate('/tasks', { replace: true });
+      } else {
+        alert("Account created! Please check your email.");
+        navigate('/login');
+      }
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Box sx={{ minHeight: '100vh', display: 'flex', alignItems: 'center', bgcolor: 'background.default', position: 'relative', py: 4 }}>
+      <IconButton 
+        onClick={() => setMode(isDark ? 'light' : 'dark')} 
+        sx={{ position: 'absolute', top: 20, right: 20, zIndex: 10 }}
+      >
+        {isDark ? <LightModeIcon sx={{ color: '#fbbf24' }} /> : <DarkModeIcon sx={{ color: '#6366f1' }} />}
+      </IconButton>
+
+      <Container maxWidth="xs" sx={{ zIndex: 1 }}>
+        <Paper elevation={0} sx={{ 
+          p: 4, borderRadius: '24px', bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', textAlign: 'center'
+        }}>
+          <Typography variant="h4" fontWeight="900" sx={{ color: 'text.primary', mb: 1 }}>Create Account</Typography>
+          {error && <Alert severity="error" sx={{ mb: 2, borderRadius: '12px' }}>{error}</Alert>}
+          
+          <form onSubmit={handleSignup} noValidate>
+            <Box sx={{ mb: 3, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+              <Avatar src={previewUrl} sx={{ width: 80, height: 80, mb: 1.5, border: '2px solid', borderColor: 'primary.main' }} />
+              <Button variant="outlined" component="label" size="small" startIcon={<PhotoCamera />}>
+                Upload Photo <input hidden accept="image/*" type="file" onChange={handleImageChange} />
+              </Button>
+            </Box>
+
+            <TextField fullWidth label="Full Name" margin="normal" variant="filled" value={fullName} onChange={(e) => setFullName(e.target.value)} sx={{ '& .MuiFilledInput-root': { borderRadius: '12px' }, mb: 1 }} />
+            <TextField fullWidth label="Email" margin="normal" variant="filled" value={email} onChange={(e) => setEmail(e.target.value)} sx={{ '& .MuiFilledInput-root': { borderRadius: '12px' }, mb: 1 }} />
+            <TextField fullWidth label="Password" type={showPassword ? 'text' : 'password'} margin="normal" variant="filled" value={password} onChange={(e) => setPassword(e.target.value)} sx={{ '& .MuiFilledInput-root': { borderRadius: '12px' }, mb: 1 }}
+              InputProps={{ endAdornment: (<InputAdornment position="end"><IconButton onClick={() => setShowPassword(!showPassword)}>{showPassword ? <VisibilityOff /> : <Visibility />}</IconButton></InputAdornment>) }} />
+            <TextField fullWidth label="Confirm Password" type={showPassword ? 'text' : 'password'} margin="normal" variant="filled" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} sx={{ '& .MuiFilledInput-root': { borderRadius: '12px' }, mb: 2 }} />
+
+            <Button fullWidth variant="contained" type="submit" disabled={loading} sx={{ mt: 2, py: 1.8, borderRadius: '14px', background: `linear-gradient(45deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})` }}>
+              {loading ? <CircularProgress size={24} color="inherit" /> : 'Create Account'}
+            </Button>
+          </form>
+          <Typography mt={4} sx={{ color: 'text.secondary' }}>
+            Already a member? <Link component={RouterLink} to="/login" sx={{ fontWeight: 'bold' }}>Login Here</Link>
+          </Typography>
+        </Paper>
+      </Container>
+    </Box>
+  );
+};
+
+export default Signup;
