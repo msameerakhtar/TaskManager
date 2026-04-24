@@ -14,7 +14,6 @@ import {
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import { logout } from '../features/auth/authSlice';
-import { supabase } from '../config/supabaseClient';
 
 const Navbar = ({ mode, toggleTheme }) => {
     const navigate = useNavigate();
@@ -27,8 +26,8 @@ const Navbar = ({ mode, toggleTheme }) => {
 
     const isHomePage = location.pathname === '/';
     
-    const fullName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || "User";
-    const avatarUrl = user?.user_metadata?.avatar_url;
+    const fullName = user?.fullName || user?.email?.split('@')[0] || "User";
+    const avatarUrl = user?.avatarUrl;
 
     const navItems = [
         { label: 'Home', path: '/tasks' },
@@ -37,8 +36,7 @@ const Navbar = ({ mode, toggleTheme }) => {
         { label: 'Blog', path: '/blog' },
     ];
 
-    const handleLogout = async () => {
-        await supabase.auth.signOut();
+    const handleLogout = () => {
         dispatch(logout());
         navigate('/login');
     };

@@ -5,12 +5,13 @@ import {
     Snackbar, Alert, useTheme
 } from '@mui/material';
 import axios from 'axios';
-
-const API_BASE_URL = 'https://6996bef77d1786436575294e.mockapi.io/api/tm/tasks';
+import API_BASE_URL from '../../config/api';
+import { useSelector } from 'react-redux';
 
 const CreateTask = ({ open, handleClose, refreshTasks }) => {
     const theme = useTheme();
     const isDark = theme.palette.mode === 'dark';
+    const token = useSelector((state) => state.auth.token);
 
     const [formData, setFormData] = useState({
         title: '',
@@ -62,7 +63,9 @@ const CreateTask = ({ open, handleClose, refreshTasks }) => {
         setLoading(true);
 
         try {
-            await axios.post(API_BASE_URL, formData);
+            await axios.post(`${API_BASE_URL}/tasks`, formData, {
+                headers: { 'x-auth-token': token }
+            });
 
             setFormData({ title: '', description: '', status: 'pendiente' });
             refreshTasks();

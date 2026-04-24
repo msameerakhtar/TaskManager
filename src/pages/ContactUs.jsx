@@ -5,7 +5,8 @@ import {
     Stack, IconButton, useTheme
 } from '@mui/material';
 import { Person, Email, Send, Phone, LocationOn } from '@mui/icons-material';
-import { supabase } from '../config/supabaseClient';
+import axios from 'axios';
+import API_BASE_URL from '../config/api';
 
 const CONTACT_INFO = {
     phone: '+1 (555) 000-1234',
@@ -95,15 +96,15 @@ const ContactUs = () => {
                 email: formData.email.trim().toLowerCase(),
                 message: formData.message.trim(),
             };
-            const { error } = await supabase.from('contacts').insert([payload]);
-            if (error) throw error;
+            await axios.post(`${API_BASE_URL}/contacts`, payload);
+            
             setStatus({ open: true, message: 'Message sent successfully!', severity: 'success' });
             setFormData(INITIAL_FORM);
             setErrors({});
-        } catch {
+        } catch (err) {
             setStatus({
                 open: true,
-                message: 'Something went wrong. Please try again later.',
+                message: err.response?.data?.message || 'Something went wrong. Please try again later.',
                 severity: 'error',
             });
         } finally {
