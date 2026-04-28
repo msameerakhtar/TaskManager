@@ -25,6 +25,8 @@ app.get('/', (req, res) => {
     res.send('Task Manager API is running...');
 });
 
+app.get('/favicon.ico', (req, res) => res.status(204).end());
+
 // Database Connection
 mongoose.connect(process.env.MONGODB_URI)
     .then(() => console.log('✅ MongoDB Connected Successfully to local/cloud instance'))
