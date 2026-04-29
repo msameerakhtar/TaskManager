@@ -6,11 +6,13 @@ import {
 } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
 
-const API_URL = 'https://6996bef77d1786436575294e.mockapi.io/api/tm/tasks';
+import API_BASE_URL from '../../config/api';
+import { useSelector } from 'react-redux';
 
 const DeleteTask = ({ taskId, onDeleteSuccess }) => {
     const theme = useTheme();
     const isDark = theme.palette.mode === 'dark';
+    const token = useSelector((state) => state.auth.token);
     
     const [loading, setLoading] = useState(false);
     const [openDialog, setOpenDialog] = useState(false);
@@ -28,7 +30,9 @@ const DeleteTask = ({ taskId, onDeleteSuccess }) => {
         setLoading(true);
         
         try {
-            await axios.delete(`${API_URL}/${taskId}`);
+            await axios.delete(`${API_BASE_URL}/tasks/${taskId}`, {
+                headers: { 'x-auth-token': token }
+            });
             setFeedback({
                 open: true,
                 message: "Task deleted successfully!",

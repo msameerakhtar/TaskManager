@@ -7,7 +7,8 @@ import { Visibility, VisibilityOff } from '@mui/icons-material';
 import LightModeIcon from '@mui/icons-material/LightMode';
 import DarkModeIcon from '@mui/icons-material/DarkMode';
 import { useNavigate, Link as RouterLink } from 'react-router-dom';
-import { supabase } from '../../config/supabaseClient';
+import axios from 'axios';
+import API_BASE_URL from '../../config/api';
 import { useDispatch } from 'react-redux';
 import { login } from '../auth/authSlice';
 
@@ -31,22 +32,22 @@ const Login = ({ mode, setMode }) => {
     setLoading(true);
 
     try {
-      const { data, error: authError } = await supabase.auth.signInWithPassword({
+      const response = await axios.post(`${API_BASE_URL}/auth/login`, {
         email: email.trim(),
         password,
       });
 
-      if (authError) throw authError;
+      const { token, user } = response.data;
 
-      if (data?.session) {
+      if (token) {
         dispatch(login({
-          user: data.session.user,
-          token: data.session.access_token
+          user: user,
+          token: token
         }));
         navigate('/tasks', { replace: true });
       }
     } catch (err) {
-      setError(err.message || "An unexpected error occurred.");
+      setError(err.response?.data?.message || "An unexpected error occurred.");
     } finally {
       setLoading(false);
     }

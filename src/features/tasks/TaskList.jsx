@@ -13,7 +13,7 @@ import DeleteTask from './DeleteTask';
 import { useDispatch, useSelector } from 'react-redux';
 import { setTasks, setLoading as setReduxLoading } from '../../features/tasks/tasksSlice';
 
-const API_URL = 'https://6996bef77d1786436575294e.mockapi.io/api/tm/tasks';
+import API_BASE_URL from '../../config/api';
 
 const TaskList = () => {
   const theme = useTheme();
@@ -21,6 +21,7 @@ const TaskList = () => {
   const dispatch = useDispatch();
   const tasks = useSelector((state) => state.tasks.items);
   const loading = useSelector((state) => state.tasks.loading);
+  const token = useSelector((state) => state.auth.token);
 
   const [openModal, setOpenModal] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
@@ -30,8 +31,10 @@ const TaskList = () => {
   const fetchTasks = async () => {
     dispatch(setReduxLoading(true));
     try {
-      const { data } = await axios.get(API_URL);
-      const validTasks = (data || []).filter(t => t.id);
+      const response = await axios.get(`${API_BASE_URL}/tasks`, {
+        headers: { 'x-auth-token': token }
+      });
+      const validTasks = response.data.map(t => ({ ...t, id: t._id }));
       dispatch(setTasks(validTasks));
       setFilteredTasks(validTasks);
     } catch (error) {

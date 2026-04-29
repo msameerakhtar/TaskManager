@@ -4,12 +4,13 @@ import {
     Stack, MenuItem, CircularProgress, Snackbar, Alert, Backdrop, Fade, useTheme
 } from '@mui/material';
 import axios from 'axios';
-
-const API_URL = 'https://6996bef77d1786436575294e.mockapi.io/api/tm/tasks';
+import API_BASE_URL from '../../config/api';
+import { useSelector } from 'react-redux';
 
 const UpdateTask = ({ open, handleClose, taskData, onUpdateSuccess }) => {
     const theme = useTheme();
     const isDark = theme.palette.mode === 'dark';
+    const token = useSelector((state) => state.auth.token);
 
     const [formData, setFormData] = useState({ title: '', description: '', status: 'pendiente' });
     const [loading, setLoading] = useState(false);
@@ -57,6 +58,11 @@ const UpdateTask = ({ open, handleClose, taskData, onUpdateSuccess }) => {
         setFormData({ ...formData, [e.target.name]: e.target.value });
     };
 
+    const isChanged = 
+        formData.title !== (taskData.title || taskData.task || '') ||
+        formData.description !== (taskData.description || '') ||
+        formData.status !== (taskData.status || 'pendiente');
+
     const handleUpdate = async (e) => {
         e.preventDefault();
         const taskId = taskData?.id;
@@ -68,7 +74,9 @@ const UpdateTask = ({ open, handleClose, taskData, onUpdateSuccess }) => {
 
         setLoading(true);
         try {
-            await axios.put(`${API_URL}/${taskId}`, formData);
+            await axios.put(`${API_BASE_URL}/tasks/${taskId}`, formData, {
+                headers: { 'x-auth-token': token }
+            });
             setFeedback({ open: true, message: 'Task updated successfully!', severity: 'success' });
             
             setTimeout(() => {
@@ -157,11 +165,12 @@ const UpdateTask = ({ open, handleClose, taskData, onUpdateSuccess }) => {
                                     <MenuItem value="pendiente">Pending</MenuItem>
                                     <MenuItem value="completada">Completed</MenuItem>
                                 </TextField>
+                                
                                 <Button
                                     type="submit"
                                     variant="contained"
                                     fullWidth
-                                    disabled={loading}
+                                    disabled={loading || !isChanged}
                                     sx={{ 
                                         background: `linear-gradient(45deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,
                                         fontWeight: 'bold',
@@ -169,12 +178,13 @@ const UpdateTask = ({ open, handleClose, taskData, onUpdateSuccess }) => {
                                         py: 1.5,
                                         textTransform: 'none',
                                         fontSize: '1rem',
-                                        boxShadow: `0 10px 20px ${theme.palette.primary.main}4D`,
+                                        boxShadow: isChanged ? `0 10px 20px ${theme.palette.primary.main}4D` : 'none',
                                         '&:hover': { 
                                             opacity: 0.9,
-                                            transform: 'translateY(-2px)' 
+                                            transform: isChanged ? 'translateY(-2px)' : 'none'
                                         },
-                                        transition: 'all 0.2s'
+                                        transition: 'all 0.2s',
+                                        opacity: isChanged ? 1 : 0.6
                                     }}
                                 >
                                     {loading ? <CircularProgress size={24} sx={{ color: '#fff' }} /> : 'Update Task'}
@@ -184,6 +194,7 @@ const UpdateTask = ({ open, handleClose, taskData, onUpdateSuccess }) => {
                     </Box>
                 </Fade>
             </Modal>
+
 
             <Snackbar 
                 open={feedback.open} 

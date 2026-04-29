@@ -7,7 +7,8 @@ import { PhotoCamera, Visibility, VisibilityOff } from '@mui/icons-material';
 import LightModeIcon from '@mui/icons-material/LightMode';
 import DarkModeIcon from '@mui/icons-material/DarkMode';
 import { useNavigate, Link as RouterLink } from 'react-router-dom';
-import { supabase } from '../../config/supabaseClient';
+import axios from 'axios';
+import API_BASE_URL from '../../config/api';
 import { useDispatch } from 'react-redux';
 import { login } from '../auth/authSlice';
 
@@ -48,31 +49,27 @@ const Signup = ({ mode, setMode }) => {
     setLoading(true);
 
     try {
-      let avatarUrl = "";
-      if (imageFile) {
-        const fileExt = imageFile.name.split('.').pop();
-        const fileName = `${Date.now()}.${fileExt}`;
-        const { error: uploadError } = await supabase.storage.from('avatars').upload(fileName, imageFile);
-        if (uploadError) throw uploadError;
-        avatarUrl = supabase.storage.from('avatars').getPublicUrl(fileName).data.publicUrl;
-      }
-
-      const { data, error: signupError } = await supabase.auth.signUp({
+      // Note: Backend image upload logic can be added later using Multer.
+      // For now, we'll just send the text data.
+      const response = await axios.post(`${API_BASE_URL}/auth/signup`, {
+        fullName: fullName.trim(),
         email: email.trim(),
         password,
-        options: { data: { full_name: fullName.trim(), avatar_url: avatarUrl } },
+        avatarUrl: "" // Placeholder for now
       });
 
-      if (signupError) throw signupError;
-      if (data.session) {
-        dispatch(login({ user: data.session.user, token: data.session.access_token }));
+      const { token, user } = response.data;
+
+      if (token) {
+        dispatch(login({ user: user, token: token }));
         navigate('/tasks', { replace: true });
       } else {
-        alert("Account created! Please check your email.");
+        alert("Account created successfully! Please login.");
         navigate('/login');
       }
     } catch (err) {
-      setError(err.message);
+      const errorMsg = err.response?.data?.message || err.message || "Registration failed.";
+      setError(errorMsg);
     } finally {
       setLoading(false);
     }

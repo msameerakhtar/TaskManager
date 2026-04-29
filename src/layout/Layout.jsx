@@ -2,33 +2,25 @@ import React, { useState, useEffect } from 'react';
 import { Box, Container, CircularProgress } from '@mui/material';
 import { Outlet, useNavigate } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
-import { logout, login } from '../features/auth/authSlice';
-import { supabase } from '../config/supabaseClient';
+import { logout } from '../features/auth/authSlice';
 import Navbar from '../layout/Navbar';
 import Header from '../layout/Header';
 import Footer from '../layout/Footer';
 
 const Layout = ({ toggleTheme, mode }) => {
-    const [isInitialLoading, setIsInitialLoading] = useState(true);
+    const [isInitialLoading, setIsInitialLoading] = useState(false);
     const navigate = useNavigate();
     const dispatch = useDispatch();
     const user = useSelector((state) => state.auth.user);
+    const token = useSelector((state) => state.auth.token);
 
     useEffect(() => {
-        const restoreSession = async () => {
-            const { data: { session } } = await supabase.auth.getSession();
-            if (session) {
-                dispatch(login({ user: session.user, token: session.access_token }));
-            } else {
-                navigate('/login');
-            }
-            setIsInitialLoading(false);
-        };
-        restoreSession();
-    }, [dispatch, navigate]);
+        if (!token) {
+            navigate('/login');
+        }
+    }, [token, navigate]);
 
-    const handleLogout = async () => {
-        await supabase.auth.signOut();
+    const handleLogout = () => {
         dispatch(logout());
         navigate('/login', { replace: true });
     };
