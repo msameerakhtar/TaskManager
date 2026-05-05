@@ -3,6 +3,7 @@ const router = express.Router();
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 const authMiddleware = require('../middleware/authMiddleware');
+const Project = require('../models/Project');
 
 // @route   POST api/auth/signup
 // @desc    Register user
@@ -23,6 +24,12 @@ router.post('/signup', async (req, res) => {
         });
 
         await user.save();
+
+        await Project.create({
+            name: `${fullName.split(' ')[0]}'s Workspace`,
+            ownerId: user._id,
+            members: [{ userId: user._id, role: 'admin' }]
+        });
 
         const payload = { id: user._id };
         const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '24h' });

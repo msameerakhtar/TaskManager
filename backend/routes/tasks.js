@@ -2,15 +2,257 @@ const express = require('express');
 const router = express.Router();
 const Task = require('../models/Task');
 const authMiddleware = require('../middleware/authMiddleware');
+const Project = require('../models/Project');
+const User = require('../models/User');
+const ApprovalRequest = require('../models/ApprovalRequest');
+const Notification = require('../models/Notification');
+const multer = require('multer');
+const path = require('path');
+const { logAudit } = require('../services/auditService');
+const { sendSlackWebhook } = require('../services/integrationService');
+const { isProjectMember, memberUserIdString } = require('../utils/projectAccess');
 
 // Sabhi routes authMiddleware use karenge (Protected)
 router.use(authMiddleware);
+
+const VALID_STATUSES = ['todo', 'in_progress', 'done'];
+const VALID_PRIORITIES = ['low', 'medium', 'high'];
+const VALID_RECURRENCE = ['daily', 'weekly', 'monthly'];
+const DAILY_CAPACITY_HOURS = 6;
+
+const storage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        cb(null, path.join(__dirname, '..', 'uploads'));
+    },
+    filename: (req, file, cb) => {
+        const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+        cb(null, `${uniqueSuffix}-${file.originalname.replace(/\s+/g, '_')}`);
+    }
+});
+
+const upload = multer({
+    storage,
+    limits: { fileSize: 5 * 1024 * 1024 }
+});
+
+const addDays = (date, days) => {
+    const d = new Date(date);
+    d.setDate(d.getDate() + days);
+    return d;
+};
+
+const getNextRecurringDate = (dueDate, frequency) => {
+    if (frequency === 'daily') return addDays(dueDate, 1);
+    if (frequency === 'weekly') return addDays(dueDate, 7);
+    if (frequency === 'monthly') {
+        const d = new Date(dueDate);
+        d.setMonth(d.getMonth() + 1);
+        return d;
+    }
+    return null;
+};
+
+const getProjectRole = (project, userId) => {
+    const uid = String(userId);
+    if (project.ownerId && String(project.ownerId) === uid) return 'admin';
+    const member = project.members.find((m) => memberUserIdString(m) === uid);
+    return member ? member.role : null;
+};
+
+const suggestPriority = ({ dueDate, estimatedHours = 2, currentLoad = 0 }) => {
+    const now = new Date();
+    const due = new Date(dueDate);
+    const daysLeft = Math.max(Math.ceil((due.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)), 0);
+    const pressureScore = (estimatedHours + currentLoad) / DAILY_CAPACITY_HOURS;
+
+    if (daysLeft <= 1 || pressureScore >= 3) return 'high';
+    if (daysLeft <= 3 || pressureScore >= 1.5) return 'medium';
+    return 'low';
+};
+
+const suggestDeadline = ({ dueDate, estimatedHours = 2, bookedHours = 0 }) => {
+    const now = new Date();
+    const due = new Date(dueDate);
+    const daysUntilDue = Math.max(Math.ceil((due.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)), 1);
+    const availableHours = daysUntilDue * DAILY_CAPACITY_HOURS;
+    const requiredHours = bookedHours + estimatedHours;
+
+    if (requiredHours <= availableHours) {
+        return { feasible: true, suggestedDueDate: due, extraDays: 0 };
+    }
+
+    const extraDays = Math.ceil((requiredHours - availableHours) / DAILY_CAPACITY_HOURS);
+    const suggestedDueDate = addDays(due, extraDays);
+    return { feasible: false, suggestedDueDate, extraDays };
+};
+
+const emitProjectTaskEvent = (req, projectId, action, task) => {
+    const io = req.app.get('io');
+    if (!io || !projectId) return;
+    io.to(`project:${projectId}`).emit('task:changed', {
+        action,
+        projectId: projectId.toString(),
+        taskId: task?._id?.toString() || task?.id || null
+    });
+};
+
+const normalizeStatus = (status) => {
+    if (!status) return undefined;
+    if (status === 'pendiente') return 'todo';
+    if (status === 'completada') return 'done';
+    return status;
+};
+
+const validateTaskPayload = async (payload, userId, isUpdate = false) => {
+    const errors = [];
+    const normalizedStatus = normalizeStatus(payload.status);
+    const taskData = {};
+    let project = null;
+    const shouldAutoPriority = payload.autoPriority === true;
+
+    if (!isUpdate || payload.projectId !== undefined) {
+        if (!payload.projectId) {
+            errors.push('Project is required.');
+        } else {
+            project = await Project.findById(payload.projectId);
+            if (!project) {
+                errors.push('Project not found.');
+            } else if (!isProjectMember(project, userId)) {
+                errors.push('You are not a member of the selected project.');
+            } else {
+                taskData.projectId = project._id;
+            }
+        }
+    }
+
+    if (!isUpdate || payload.assigneeId !== undefined) {
+        if (!payload.assigneeId) {
+            taskData.assigneeId = null;
+        } else if (!project && !payload.projectId) {
+            const assignee = await User.findById(payload.assigneeId);
+            if (!assignee) {
+                errors.push('Assignee not found.');
+            } else {
+                taskData.assigneeId = assignee._id;
+            }
+        } else if (project) {
+            const inProject = project.members.some((m) => m.userId.toString() === payload.assigneeId);
+            if (!inProject) {
+                errors.push('Assignee must be a member of the selected project.');
+            } else {
+                taskData.assigneeId = payload.assigneeId;
+            }
+        }
+    }
+
+    if (!isUpdate || payload.title !== undefined) {
+        if (!payload.title || !payload.title.trim()) {
+            errors.push('Title is required.');
+        } else {
+            taskData.title = payload.title.trim();
+        }
+    }
+
+    if (!isUpdate || payload.description !== undefined) {
+        taskData.description = payload.description ? payload.description.trim() : '';
+    }
+
+    if (!isUpdate || payload.status !== undefined) {
+        if (!normalizedStatus || !VALID_STATUSES.includes(normalizedStatus)) {
+            errors.push('Status must be one of: todo, in_progress, done.');
+        } else {
+            taskData.status = normalizedStatus;
+        }
+    }
+
+    if (!isUpdate || payload.priority !== undefined) {
+        if (shouldAutoPriority && !payload.priority) {
+            // Priority will be auto-suggested after load analysis.
+        } else if (!payload.priority || !VALID_PRIORITIES.includes(payload.priority)) {
+            errors.push('Priority must be one of: low, medium, high.');
+        } else {
+            taskData.priority = payload.priority;
+        }
+    }
+
+    if (!isUpdate || payload.estimatedHours !== undefined) {
+        const hours = Number(payload.estimatedHours);
+        if (Number.isNaN(hours) || hours <= 0) {
+            errors.push('Estimated hours must be a positive number.');
+        } else {
+            taskData.estimatedHours = hours;
+        }
+    }
+
+    if (!isUpdate || payload.dueDate !== undefined) {
+        if (!payload.dueDate) {
+            errors.push('Due date is required.');
+        } else {
+            const parsedDate = new Date(payload.dueDate);
+            if (Number.isNaN(parsedDate.getTime())) {
+                errors.push('Due date must be a valid date.');
+            } else {
+                taskData.dueDate = parsedDate;
+            }
+        }
+    }
+
+    if (!isUpdate || payload.recurrence !== undefined) {
+        const recurrence = payload.recurrence || { enabled: false };
+        if (recurrence.enabled) {
+            if (!recurrence.frequency || !VALID_RECURRENCE.includes(recurrence.frequency)) {
+                errors.push('Recurrence frequency must be one of: daily, weekly, monthly.');
+            } else {
+                taskData.recurrence = { enabled: true, frequency: recurrence.frequency };
+            }
+        } else {
+            taskData.recurrence = { enabled: false };
+        }
+    }
+
+    if (!isUpdate || payload.notes !== undefined) {
+        if (payload.notes === undefined) {
+            // no-op
+        } else if (!Array.isArray(payload.notes)) {
+            errors.push('Notes must be an array.');
+        } else {
+            const sanitizedNotes = payload.notes
+                .map((note) => ({
+                    content: typeof note.content === 'string' ? note.content.trim() : '',
+                    createdAt: note.createdAt ? new Date(note.createdAt) : new Date()
+                }))
+                .filter((note) => note.content);
+            taskData.notes = sanitizedNotes;
+        }
+    }
+
+    return { errors, taskData };
+};
 
 // @route   GET api/tasks
 // @desc    Get all tasks for logged in user
 router.get('/', async (req, res) => {
     try {
-        const tasks = await Task.find({ userId: req.user.id }).sort({ createdAt: -1 });
+        const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 200, 1), 500);
+        const query = {};
+        if (req.query.projectId) {
+            const project = await Project.findById(req.query.projectId);
+            if (!project) return res.status(404).json({ message: 'Project not found' });
+            if (!isProjectMember(project, req.user.id)) {
+                return res.status(403).json({ message: 'Not authorized for this project.' });
+            }
+            query.projectId = project._id;
+        } else {
+            const projects = await Project.find({ 'members.userId': req.user.id }).select('_id').lean();
+            query.projectId = { $in: projects.map((p) => p._id) };
+        }
+        const tasks = await Task.find(query)
+            .sort({ createdAt: -1 })
+            .limit(limit)
+            .populate('assigneeId', 'fullName email')
+            .populate('comments.userId', 'fullName email')
+            .populate('activityLog.actorId', 'fullName email')
+            .lean();
         res.json(tasks);
     } catch (err) {
         console.error(err.message);
@@ -21,17 +263,47 @@ router.get('/', async (req, res) => {
 // @route   POST api/tasks
 // @desc    Create a new task
 router.post('/', async (req, res) => {
-    const { title, description, status } = req.body;
+    const { errors, taskData } = await validateTaskPayload(req.body, req.user.id);
+    if (errors.length > 0) {
+        return res.status(400).json({ message: errors.join(' ') });
+    }
 
     try {
+        if (req.body.autoPriority === true && !taskData.priority) {
+            const openTasks = await Task.find({
+                projectId: taskData.projectId,
+                assigneeId: taskData.assigneeId || null,
+                status: { $ne: 'done' }
+            }).lean();
+            const bookedHours = openTasks.reduce((sum, t) => sum + (Number(t.estimatedHours) || 2), 0);
+            taskData.priority = suggestPriority({
+                dueDate: taskData.dueDate,
+                estimatedHours: taskData.estimatedHours || 2,
+                currentLoad: bookedHours
+            });
+        }
+
         const newTask = new Task({
             userId: req.user.id,
-            title,
-            description,
-            status
+            ...taskData,
+            activityLog: [{
+                actorId: req.user.id,
+                action: 'created',
+                detail: 'Task created'
+            }]
         });
 
         const task = await newTask.save();
+        emitProjectTaskEvent(req, task.projectId, 'created', task);
+        await logAudit({
+            actorId: req.user.id,
+            projectId: task.projectId,
+            entityType: 'task',
+            entityId: task._id,
+            action: 'created',
+            meta: { title: task.title },
+            ip: req.ip
+        });
         res.status(201).json(task);
     } catch (err) {
         console.error(err.message);
@@ -42,24 +314,142 @@ router.post('/', async (req, res) => {
 // @route   PUT api/tasks/:id
 // @desc    Update a task
 router.put('/:id', async (req, res) => {
-    const { title, description, status } = req.body;
+    const { errors, taskData } = await validateTaskPayload(req.body, req.user.id, true);
+    if (errors.length > 0) {
+        return res.status(400).json({ message: errors.join(' ') });
+    }
 
     try {
         let task = await Task.findById(req.params.id);
 
         if (!task) return res.status(404).json({ message: 'Task not found' });
-
-        // Check user ownership
-        if (task.userId.toString() !== req.user.id) {
-            return res.status(401).json({ message: 'Not authorized' });
+        const project = await Project.findById(task.projectId);
+        if (!project || !isProjectMember(project, req.user.id)) {
+            return res.status(403).json({ message: 'Not authorized' });
         }
 
-        task = await Task.findByIdAndUpdate(
-            req.params.id,
-            { $set: { title, description, status } },
-            { new: true }
-        );
+        const previousStatus = task.status;
+        const wantsDone = taskData.status === 'done' && previousStatus !== 'done';
+        const requireApproval = !!(project.enterprise && project.enterprise.requireApprovalForCompletion);
+        if (wantsDone && requireApproval) {
+            delete taskData.status;
+        }
 
+        if (req.body.autoPriority === true && !taskData.priority && taskData.dueDate) {
+            const openTasks = await Task.find({
+                projectId: task.projectId,
+                assigneeId: taskData.assigneeId || task.assigneeId || null,
+                status: { $ne: 'done' },
+                _id: { $ne: task._id }
+            }).lean();
+            const bookedHours = openTasks.reduce((sum, t) => sum + (Number(t.estimatedHours) || 2), 0);
+            taskData.priority = suggestPriority({
+                dueDate: taskData.dueDate,
+                estimatedHours: taskData.estimatedHours || task.estimatedHours || 2,
+                currentLoad: bookedHours
+            });
+        }
+
+        Object.assign(task, taskData);
+        if (task.status === 'done' && !task.completedAt) {
+            task.completedAt = new Date();
+        } else if (task.status !== 'done') {
+            task.completedAt = null;
+        }
+
+        if (wantsDone && requireApproval && task.status !== 'done') {
+            const existing = await ApprovalRequest.findOne({ taskId: task._id, status: 'pending' });
+            if (!existing) {
+                await ApprovalRequest.create({
+                    projectId: task.projectId,
+                    taskId: task._id,
+                    requestedBy: req.user.id
+                });
+            }
+            task.approvalStatus = 'pending';
+            task.activityLog.push({
+                actorId: req.user.id,
+                action: 'completion_requested',
+                detail: 'Completion pending admin approval'
+            });
+            await task.save();
+
+            const adminMembers = project.members.filter((m) => m.role === 'admin');
+            for (const m of adminMembers) {
+                await Notification.create({
+                    userId: m.userId,
+                    taskId: task._id,
+                    type: 'approval_request',
+                    title: 'Approval required',
+                    message: `Task "${task.title}" needs approval to mark done.`
+                });
+            }
+            const slackUrl = project.enterprise?.integrations?.slackWebhookUrl;
+            if (slackUrl) {
+                await sendSlackWebhook(slackUrl, `Approval required: "${task.title}" (project: ${project.name})`).catch(() => {});
+            }
+
+            await logAudit({
+                actorId: req.user.id,
+                projectId: task.projectId,
+                entityType: 'approval',
+                entityId: task._id,
+                action: 'requested',
+                meta: { title: task.title },
+                ip: req.ip
+            });
+
+            emitProjectTaskEvent(req, task.projectId, 'updated', task);
+            const payload = task.toObject();
+            return res.json({ ...payload, requiresApproval: true });
+        }
+
+        if (previousStatus === 'done' && task.status !== 'done') {
+            task.approvalStatus = 'none';
+        }
+        if (task.status === 'done' && previousStatus !== 'done' && !requireApproval) {
+            task.approvalStatus = 'none';
+        }
+
+        task.activityLog.push({
+            actorId: req.user.id,
+            action: 'updated',
+            detail: 'Task updated'
+        });
+        await task.save();
+
+        await logAudit({
+            actorId: req.user.id,
+            projectId: task.projectId,
+            entityType: 'task',
+            entityId: task._id,
+            action: 'updated',
+            meta: { status: task.status, title: task.title },
+            ip: req.ip
+        });
+
+        // Auto-create next occurrence for recurring tasks when task is completed.
+        if (previousStatus !== 'done' && task.status === 'done' && task.recurrence?.enabled && task.recurrence?.frequency) {
+            const nextDueDate = getNextRecurringDate(task.dueDate, task.recurrence.frequency);
+            if (nextDueDate) {
+                const nextTask = await Task.create({
+                    userId: task.userId,
+                    projectId: task.projectId,
+                    assigneeId: task.assigneeId,
+                    title: task.title,
+                    description: task.description,
+                    status: 'todo',
+                    priority: task.priority,
+                    dueDate: nextDueDate,
+                    recurrence: task.recurrence,
+                    notes: task.notes || [],
+                    attachments: []
+                });
+                emitProjectTaskEvent(req, task.projectId, 'created', nextTask);
+            }
+        }
+
+        emitProjectTaskEvent(req, task.projectId, 'updated', task);
         res.json(task);
     } catch (err) {
         console.error(err.message);
@@ -75,15 +465,192 @@ router.delete('/:id', async (req, res) => {
 
         if (!task) return res.status(404).json({ message: 'Task not found' });
 
-        // Check user ownership
-        if (task.userId.toString() !== req.user.id) {
-            return res.status(401).json({ message: 'Not authorized' });
+        const project = await Project.findById(task.projectId);
+        const role = project ? getProjectRole(project, req.user.id) : null;
+        if (!project || !role) {
+            return res.status(403).json({ message: 'Not authorized' });
+        }
+        if (role !== 'admin' && task.userId.toString() !== req.user.id) {
+            return res.status(403).json({ message: 'Only admins or task creators can delete this task.' });
         }
 
         await Task.findByIdAndDelete(req.params.id);
+        emitProjectTaskEvent(req, task.projectId, 'deleted', task);
+        await logAudit({
+            actorId: req.user.id,
+            projectId: task.projectId,
+            entityType: 'task',
+            entityId: task._id,
+            action: 'deleted',
+            meta: { title: task.title },
+            ip: req.ip
+        });
         res.json({ message: 'Task removed' });
     } catch (err) {
         console.error(err.message);
+        res.status(500).send('Server Error');
+    }
+});
+
+// @route   POST api/tasks/:id/notes
+// @desc    Add a note to a task
+router.post('/:id/notes', async (req, res) => {
+    const { content } = req.body;
+    if (!content || !content.trim()) {
+        return res.status(400).json({ message: 'Note content is required.' });
+    }
+
+    try {
+        const task = await Task.findById(req.params.id);
+        if (!task) return res.status(404).json({ message: 'Task not found' });
+        const project = await Project.findById(task.projectId);
+        if (!project || !isProjectMember(project, req.user.id)) {
+            return res.status(403).json({ message: 'Not authorized' });
+        }
+
+        task.notes.push({ content: content.trim() });
+        task.activityLog.push({
+            actorId: req.user.id,
+            action: 'note_added',
+            detail: 'Added a note'
+        });
+        await task.save();
+        emitProjectTaskEvent(req, task.projectId, 'updated', task);
+        res.status(201).json(task);
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).send('Server Error');
+    }
+});
+
+// @route   POST api/tasks/:id/attachments
+// @desc    Upload task attachment
+router.post('/:id/attachments', upload.single('attachment'), async (req, res) => {
+    if (!req.file) {
+        return res.status(400).json({ message: 'Attachment is required.' });
+    }
+
+    try {
+        const task = await Task.findById(req.params.id);
+        if (!task) return res.status(404).json({ message: 'Task not found' });
+        const project = await Project.findById(task.projectId);
+        if (!project || !isProjectMember(project, req.user.id)) {
+            return res.status(403).json({ message: 'Not authorized' });
+        }
+
+        task.attachments.push({
+            originalName: req.file.originalname,
+            fileName: req.file.filename,
+            filePath: `/uploads/${req.file.filename}`,
+            mimeType: req.file.mimetype,
+            size: req.file.size
+        });
+        task.activityLog.push({
+            actorId: req.user.id,
+            action: 'attachment_added',
+            detail: `Uploaded attachment ${req.file.originalname}`
+        });
+        await task.save();
+        emitProjectTaskEvent(req, task.projectId, 'updated', task);
+
+        res.status(201).json(task);
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).send('Server Error');
+    }
+});
+
+// @route POST /api/tasks/:id/comments
+router.post('/:id/comments', async (req, res) => {
+    const { text } = req.body;
+    if (!text || !text.trim()) {
+        return res.status(400).json({ message: 'Comment text is required.' });
+    }
+    try {
+        const task = await Task.findById(req.params.id);
+        if (!task) return res.status(404).json({ message: 'Task not found' });
+        const project = await Project.findById(task.projectId);
+        if (!project || !isProjectMember(project, req.user.id)) {
+            return res.status(403).json({ message: 'Not authorized' });
+        }
+
+        task.comments.push({ userId: req.user.id, text: text.trim() });
+        task.activityLog.push({
+            actorId: req.user.id,
+            action: 'comment_added',
+            detail: 'Added a comment'
+        });
+        await task.save();
+        emitProjectTaskEvent(req, task.projectId, 'updated', task);
+        res.status(201).json(task);
+    } catch (error) {
+        console.error(error.message);
+        res.status(500).send('Server Error');
+    }
+});
+
+// @route POST /api/tasks/suggest/deadline
+router.post('/suggest/deadline', async (req, res) => {
+    const { projectId, assigneeId = null, dueDate, estimatedHours = 2 } = req.body;
+    if (!projectId || !dueDate) {
+        return res.status(400).json({ message: 'projectId and dueDate are required.' });
+    }
+    try {
+        const project = await Project.findById(projectId);
+        if (!project) return res.status(404).json({ message: 'Project not found' });
+        if (!isProjectMember(project, req.user.id)) {
+            return res.status(403).json({ message: 'Not authorized' });
+        }
+
+        const openTasks = await Task.find({
+            projectId,
+            assigneeId,
+            status: { $ne: 'done' }
+        }).lean();
+        const bookedHours = openTasks.reduce((sum, t) => sum + (Number(t.estimatedHours) || 2), 0);
+        const suggestion = suggestDeadline({
+            dueDate,
+            estimatedHours: Number(estimatedHours) || 2,
+            bookedHours
+        });
+        res.json({
+            feasible: suggestion.feasible,
+            suggestedDueDate: suggestion.suggestedDueDate,
+            extraDays: suggestion.extraDays,
+            bookedHours
+        });
+    } catch (error) {
+        console.error(error.message);
+        res.status(500).send('Server Error');
+    }
+});
+
+// @route POST /api/tasks/suggest/priority
+router.post('/suggest/priority', async (req, res) => {
+    const { projectId, assigneeId = null, dueDate, estimatedHours = 2 } = req.body;
+    if (!projectId || !dueDate) {
+        return res.status(400).json({ message: 'projectId and dueDate are required.' });
+    }
+    try {
+        const project = await Project.findById(projectId);
+        if (!project) return res.status(404).json({ message: 'Project not found' });
+        if (!isProjectMember(project, req.user.id)) {
+            return res.status(403).json({ message: 'Not authorized' });
+        }
+        const openTasks = await Task.find({
+            projectId,
+            assigneeId,
+            status: { $ne: 'done' }
+        }).lean();
+        const currentLoad = openTasks.reduce((sum, t) => sum + (Number(t.estimatedHours) || 2), 0);
+        const priority = suggestPriority({
+            dueDate,
+            estimatedHours: Number(estimatedHours) || 2,
+            currentLoad
+        });
+        res.json({ priority, currentLoad });
+    } catch (error) {
+        console.error(error.message);
         res.status(500).send('Server Error');
     }
 });

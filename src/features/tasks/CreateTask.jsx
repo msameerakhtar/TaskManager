@@ -8,7 +8,7 @@ import axios from 'axios';
 import API_BASE_URL from '../../config/api';
 import { useSelector } from 'react-redux';
 
-const CreateTask = ({ open, handleClose, refreshTasks }) => {
+const CreateTask = ({ open, handleClose, refreshTasks, selectedProjectId, projectMembers = [] }) => {
     const theme = useTheme();
     const isDark = theme.palette.mode === 'dark';
     const token = useSelector((state) => state.auth.token);
@@ -16,10 +16,18 @@ const CreateTask = ({ open, handleClose, refreshTasks }) => {
     const [formData, setFormData] = useState({
         title: '',
         description: '',
-        status: 'pendiente'
+        status: 'todo',
+        priority: 'medium',
+        dueDate: '',
+        recurrenceEnabled: false,
+        recurrenceFrequency: 'daily',
+        initialNote: '',
+        assigneeId: '',
+        estimatedHours: 2
     });
     const [loading, setLoading] = useState(false);
     const [feedback, setFeedback] = useState({ open: false, message: '', severity: 'success' });
+    const [suggestionLoading, setSuggestionLoading] = useState(false);
 
     const modalStyle = {
         position: 'absolute',
@@ -60,23 +68,114 @@ const CreateTask = ({ open, handleClose, refreshTasks }) => {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+        if (!formData.title.trim()) {
+            setFeedback({ open: true, message: 'Title is required.', severity: 'warning' });
+            return;
+        }
+        if (!formData.dueDate) {
+            setFeedback({ open: true, message: 'Due date is required.', severity: 'warning' });
+            return;
+        }
+        if (!selectedProjectId) {
+            setFeedback({ open: true, message: 'Please select a workspace first.', severity: 'warning' });
+            return;
+        }
         setLoading(true);
 
         try {
-            await axios.post(`${API_BASE_URL}/tasks`, formData, {
+            const payload = {
+                title: formData.title,
+                description: formData.description,
+                status: formData.status,
+                priority: formData.priority,
+                dueDate: formData.dueDate,
+                projectId: selectedProjectId,
+                assigneeId: formData.assigneeId || null,
+                estimatedHours: Number(formData.estimatedHours) || 2,
+                recurrence: formData.recurrenceEnabled
+                    ? { enabled: true, frequency: formData.recurrenceFrequency }
+                    : { enabled: false },
+                notes: formData.initialNote.trim()
+                    ? [{ content: formData.initialNote.trim() }]
+                    : []
+            };
+
+            await axios.post(`${API_BASE_URL}/tasks`, payload, {
                 headers: { 'x-auth-token': token }
             });
 
-            setFormData({ title: '', description: '', status: 'pendiente' });
+            setFormData({
+                title: '',
+                description: '',
+                status: 'todo',
+                priority: 'medium',
+                dueDate: '',
+                recurrenceEnabled: false,
+                recurrenceFrequency: 'daily',
+                initialNote: '',
+                assigneeId: '',
+                estimatedHours: 2
+            });
             refreshTasks();
             setFeedback({ open: true, message: 'Task Added Successfully!', severity: 'success' });
 
             setTimeout(handleClose, 1500);
         } catch (error) {
-            const errorMsg = error.response?.data || "Error while adding task!";
+            const errorMsg = error.response?.data?.message || error.response?.data || "Error while adding task!";
             setFeedback({ open: true, message: errorMsg, severity: 'error' });
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleSuggestDeadline = async () => {
+        if (!selectedProjectId || !formData.dueDate) return;
+        setSuggestionLoading(true);
+        try {
+            const response = await axios.post(`${API_BASE_URL}/tasks/suggest/deadline`, {
+                projectId: selectedProjectId,
+                assigneeId: formData.assigneeId || null,
+                dueDate: formData.dueDate,
+                estimatedHours: Number(formData.estimatedHours) || 2
+            }, {
+                headers: { 'x-auth-token': token }
+            });
+            const data = response.data;
+            if (!data.feasible && data.suggestedDueDate) {
+                const date = new Date(data.suggestedDueDate).toISOString().split('T')[0];
+                setFormData((prev) => ({ ...prev, dueDate: date }));
+                setFeedback({ open: true, severity: 'info', message: `Suggested deadline applied (+${data.extraDays} days).` });
+            } else {
+                setFeedback({ open: true, severity: 'success', message: 'Current deadline looks feasible.' });
+            }
+        } catch (error) {
+            setFeedback({ open: true, severity: 'error', message: error.response?.data?.message || 'Failed to suggest deadline.' });
+        } finally {
+            setSuggestionLoading(false);
+        }
+    };
+
+    const handleSuggestPriority = async () => {
+        if (!selectedProjectId || !formData.dueDate) return;
+        setSuggestionLoading(true);
+        try {
+            const response = await axios.post(`${API_BASE_URL}/tasks/suggest/priority`, {
+                projectId: selectedProjectId,
+                assigneeId: formData.assigneeId || null,
+                dueDate: formData.dueDate,
+                estimatedHours: Number(formData.estimatedHours) || 2
+            }, {
+                headers: { 'x-auth-token': token }
+            });
+            const nextPriority = response.data?.priority;
+            if (nextPriority) {
+                setFormData((prev) => ({ ...prev, priority: nextPriority }));
+                setFeedback({ open: true, severity: 'info', message: `Suggested priority applied: ${nextPriority}.` });
+            }
+        } catch (error) {
+            setFeedback({ open: true, severity: 'error', message: error.response?.data?.message || 'Failed to suggest priority.' });
+        } finally {
+            setSuggestionLoading(false);
         }
     };
 
@@ -151,9 +250,117 @@ const CreateTask = ({ open, handleClose, refreshTasks }) => {
                                         }
                                     }}
                                 >
-                                    <MenuItem value="pendiente">Pending</MenuItem>
-                                    <MenuItem value="completada">Completed</MenuItem>
+                                    <MenuItem value="todo">Todo</MenuItem>
+                                    <MenuItem value="in_progress">In Progress</MenuItem>
+                                    <MenuItem value="done">Done</MenuItem>
                                 </TextField>
+
+                                <TextField
+                                    select
+                                    fullWidth
+                                    label="Priority"
+                                    name="priority"
+                                    value={formData.priority}
+                                    onChange={handleChange}
+                                    disabled={loading}
+                                    sx={textFieldStyle}
+                                >
+                                    <MenuItem value="low">Low</MenuItem>
+                                    <MenuItem value="medium">Medium</MenuItem>
+                                    <MenuItem value="high">High</MenuItem>
+                                </TextField>
+
+                                <TextField
+                                    fullWidth
+                                    type="date"
+                                    label="Due Date"
+                                    name="dueDate"
+                                    value={formData.dueDate}
+                                    onChange={handleChange}
+                                    disabled={loading}
+                                    required
+                                    InputLabelProps={{ shrink: true }}
+                                    sx={textFieldStyle}
+                                />
+                                <TextField
+                                    fullWidth
+                                    label="Estimated Hours"
+                                    name="estimatedHours"
+                                    type="number"
+                                    value={formData.estimatedHours}
+                                    onChange={handleChange}
+                                    disabled={loading}
+                                    inputProps={{ min: 0.5, step: 0.5 }}
+                                    sx={textFieldStyle}
+                                />
+                                <TextField
+                                    select
+                                    fullWidth
+                                    label="Assign To"
+                                    name="assigneeId"
+                                    value={formData.assigneeId}
+                                    onChange={handleChange}
+                                    disabled={loading}
+                                    sx={textFieldStyle}
+                                >
+                                    <MenuItem value="">Unassigned</MenuItem>
+                                    {projectMembers.map((member) => (
+                                        <MenuItem key={member.userId?._id || member.userId} value={member.userId?._id || member.userId}>
+                                            {member.userId?.fullName || member.userId?.email || 'Member'}
+                                        </MenuItem>
+                                    ))}
+                                </TextField>
+                                <TextField
+                                    select
+                                    fullWidth
+                                    label="Recurring Task"
+                                    name="recurrenceEnabled"
+                                    value={formData.recurrenceEnabled ? 'yes' : 'no'}
+                                    onChange={(e) => setFormData((prev) => ({
+                                        ...prev,
+                                        recurrenceEnabled: e.target.value === 'yes'
+                                    }))}
+                                    disabled={loading}
+                                    sx={textFieldStyle}
+                                >
+                                    <MenuItem value="no">No</MenuItem>
+                                    <MenuItem value="yes">Yes</MenuItem>
+                                </TextField>
+                                {formData.recurrenceEnabled && (
+                                    <TextField
+                                        select
+                                        fullWidth
+                                        label="Recurrence Frequency"
+                                        name="recurrenceFrequency"
+                                        value={formData.recurrenceFrequency}
+                                        onChange={handleChange}
+                                        disabled={loading}
+                                        sx={textFieldStyle}
+                                    >
+                                        <MenuItem value="daily">Daily</MenuItem>
+                                        <MenuItem value="weekly">Weekly</MenuItem>
+                                        <MenuItem value="monthly">Monthly</MenuItem>
+                                    </TextField>
+                                )}
+                                <TextField
+                                    fullWidth
+                                    label="Initial Note (optional)"
+                                    name="initialNote"
+                                    multiline
+                                    rows={2}
+                                    value={formData.initialNote}
+                                    onChange={handleChange}
+                                    disabled={loading}
+                                    sx={textFieldStyle}
+                                />
+                                <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
+                                    <Button variant="outlined" onClick={handleSuggestDeadline} disabled={loading || suggestionLoading} sx={{ textTransform: 'none' }}>
+                                        Suggest Deadline
+                                    </Button>
+                                    <Button variant="outlined" onClick={handleSuggestPriority} disabled={loading || suggestionLoading} sx={{ textTransform: 'none' }}>
+                                        Suggest Priority
+                                    </Button>
+                                </Stack>
 
                                 <Button
                                     type="submit"

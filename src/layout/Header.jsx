@@ -6,7 +6,8 @@ const Header = ({ user }) => {
     const location = useLocation();
     const navigate = useNavigate();
     const isDashboard = location.pathname !== '/';
-    const firstName = user?.user_metadata?.full_name?.split(' ')[0] || "User";
+    const resolvedName = user?.fullName || user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'User';
+    const firstName = resolvedName.split(' ')[0];
 
     return (
         <Box sx={{ py: isDashboard ? 4 : 10, textAlign: isDashboard ? 'left' : 'center' }}>

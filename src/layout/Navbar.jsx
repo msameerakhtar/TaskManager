@@ -1,28 +1,44 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { 
     AppBar, Toolbar, Typography, Avatar, Menu, MenuItem, IconButton, 
     Box, Container, Button, ListItemIcon, Drawer, List, ListItem, ListItemText,
-    ListItemButton, Stack
+    ListItemButton, Stack, Badge, Divider
 } from '@mui/material';
 import { 
     Logout as LogoutIcon, 
     Person as PersonIcon, 
     Brightness4 as DarkModeIcon, 
     Brightness7 as LightModeIcon,
-    Menu as MenuIcon
+    Menu as MenuIcon,
+    Notifications as NotificationsIcon,
+    AccessTime as DueSoonIcon,
+    InfoOutlined as DefaultNotificationIcon,
+    FactCheckOutlined as ApprovalIcon,
+    TrendingUp as SlaEscalationIcon,
+    ReportProblemOutlined as SlaBreachIcon
 } from '@mui/icons-material';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, createSearchParams } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import { logout } from '../features/auth/authSlice';
+import axios from 'axios';
+import API_BASE_URL from '../config/api';
 
 const Navbar = ({ mode, toggleTheme }) => {
     const navigate = useNavigate();
     const location = useLocation();
     const dispatch = useDispatch();
     const user = useSelector((state) => state.auth.user);
+    const token = useSelector((state) => state.auth.token);
     
     const [anchorEl, setAnchorEl] = useState(null);
+    const [notificationAnchorEl, setNotificationAnchorEl] = useState(null);
     const [mobileOpen, setMobileOpen] = useState(false);
+    const [notifications, setNotifications] = useState([]);
+    const [notificationPage, setNotificationPage] = useState(1);
+    const [hasMoreNotifications, setHasMoreNotifications] = useState(false);
+    const [unreadCount, setUnreadCount] = useState(0);
+    const [loadingNotifications, setLoadingNotifications] = useState(false);
+    const [notificationFilter, setNotificationFilter] = useState('all');
 
     const isHomePage = location.pathname === '/';
     
@@ -31,6 +47,7 @@ const Navbar = ({ mode, toggleTheme }) => {
 
     const navItems = [
         { label: 'Home', path: '/tasks' },
+        { label: 'Enterprise', path: '/enterprise' },
         { label: 'Profile', path: '/profile' },
         { label: 'Contact Us', path: '/contact' },
         { label: 'Blog', path: '/blog' },
@@ -44,6 +61,133 @@ const Navbar = ({ mode, toggleTheme }) => {
     const handleDrawerToggle = () => {
         setMobileOpen(!mobileOpen);
     };
+
+    const formatTimeAgo = (dateInput) => {
+        if (!dateInput) return '';
+        const now = Date.now();
+        const then = new Date(dateInput).getTime();
+        const diffSec = Math.max(Math.floor((now - then) / 1000), 0);
+        if (diffSec < 60) return `${diffSec}s ago`;
+        const diffMin = Math.floor(diffSec / 60);
+        if (diffMin < 60) return `${diffMin}m ago`;
+        const diffHr = Math.floor(diffMin / 60);
+        if (diffHr < 24) return `${diffHr}h ago`;
+        const diffDay = Math.floor(diffHr / 24);
+        return `${diffDay}d ago`;
+    };
+
+    const getNotificationIcon = (type) => {
+        if (type === 'due_soon') return <DueSoonIcon fontSize="small" sx={{ color: 'warning.main', mt: 0.2 }} />;
+        if (type === 'approval_request') {
+            return <ApprovalIcon fontSize="small" sx={{ color: 'info.main', mt: 0.2 }} />;
+        }
+        if (type === 'sla_escalation') {
+            return <SlaEscalationIcon fontSize="small" sx={{ color: 'error.main', mt: 0.2 }} />;
+        }
+        if (type === 'sla_breach') {
+            return <SlaBreachIcon fontSize="small" sx={{ color: 'error.dark', mt: 0.2 }} />;
+        }
+        return <DefaultNotificationIcon fontSize="small" sx={{ color: 'text.secondary', mt: 0.2 }} />;
+    };
+
+    const getNotificationGroupLabel = (dateInput) => {
+        const now = new Date();
+        const date = new Date(dateInput);
+        const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const yesterdayStart = new Date(todayStart);
+        yesterdayStart.setDate(todayStart.getDate() - 1);
+
+        if (date >= todayStart) return 'Today';
+        if (date >= yesterdayStart && date < todayStart) return 'Yesterday';
+        return 'Older';
+    };
+
+    const fetchNotifications = useCallback(async (page = 1, append = false) => {
+        if (!token) return;
+        setLoadingNotifications(true);
+        try {
+            const response = await axios.get(`${API_BASE_URL}/notifications?page=${page}&limit=8`, {
+                headers: { 'x-auth-token': token }
+            });
+            const data = response.data || {};
+            const nextNotifications = data.notifications || [];
+            setNotifications((prev) => (append ? [...prev, ...nextNotifications] : nextNotifications));
+            setHasMoreNotifications(Boolean(data.meta?.hasMore));
+            setUnreadCount(data.meta?.unreadCount || 0);
+            setNotificationPage(page);
+        } catch (error) {
+            console.error('Notification fetch failed:', error);
+        } finally {
+            setLoadingNotifications(false);
+        }
+    }, [token]);
+
+    useEffect(() => {
+        if (token && user) {
+            fetchNotifications(1, false);
+        }
+    }, [token, user, fetchNotifications]);
+
+    const handleOpenNotifications = async (event) => {
+        setNotificationAnchorEl(event.currentTarget);
+        setNotificationFilter('all');
+        await fetchNotifications(1, false);
+    };
+
+    const handleNotificationClick = async (notification) => {
+        try {
+            if (!notification.isRead) {
+                await axios.patch(`${API_BASE_URL}/notifications/${notification._id}/read`, {}, {
+                    headers: { 'x-auth-token': token }
+                });
+            }
+        } catch (error) {
+            console.error('Failed to mark notification as read:', error);
+        } finally {
+            setNotificationAnchorEl(null);
+            setNotifications((prev) => prev.map((n) => n._id === notification._id ? { ...n, isRead: true } : n));
+            setUnreadCount((prev) => Math.max(prev - (notification.isRead ? 0 : 1), 0));
+            const params = {};
+            if (notification.projectId) {
+                params.projectId = String(notification.projectId);
+            }
+            if (notification.taskId) {
+                params.highlightTask = String(notification.taskId);
+            }
+            if (Object.keys(params).length > 0) {
+                navigate({ pathname: '/tasks', search: createSearchParams(params).toString() });
+            } else {
+                navigate('/tasks');
+            }
+        }
+    };
+
+    const handleMarkAllRead = async () => {
+        try {
+            await axios.patch(`${API_BASE_URL}/notifications/read-all`, {}, {
+                headers: { 'x-auth-token': token }
+            });
+            setNotifications((prev) => prev.map((item) => ({ ...item, isRead: true })));
+            setUnreadCount(0);
+        } catch (error) {
+            console.error('Failed to mark all notifications as read:', error);
+        }
+    };
+
+    const handleLoadMoreNotifications = async () => {
+        if (!hasMoreNotifications || loadingNotifications) return;
+        await fetchNotifications(notificationPage + 1, true);
+    };
+
+    const visibleNotifications = notifications.filter((notification) => {
+        if (notificationFilter === 'unread') return !notification.isRead;
+        if (notificationFilter === 'due_soon') return notification.type === 'due_soon';
+        if (notificationFilter === 'approvals') return notification.type === 'approval_request';
+        if (notificationFilter === 'sla') {
+            return notification.type === 'sla_escalation' || notification.type === 'sla_breach';
+        }
+        return true;
+    });
 
     return (
         <AppBar 
@@ -137,6 +281,111 @@ const Navbar = ({ mode, toggleTheme }) => {
                             </Stack>
                         ) : (
                             <>
+                                <IconButton onClick={handleOpenNotifications} sx={{ bgcolor: 'action.hover' }}>
+                                    <Badge color="error" badgeContent={unreadCount}>
+                                        <NotificationsIcon />
+                                    </Badge>
+                                </IconButton>
+                                <Menu
+                                    anchorEl={notificationAnchorEl}
+                                    open={Boolean(notificationAnchorEl)}
+                                    onClose={() => setNotificationAnchorEl(null)}
+                                    PaperProps={{ sx: { borderRadius: '12px', mt: 1.5, minWidth: 320, maxWidth: 360 } }}
+                                >
+                                    <Box sx={{ px: 1.5, py: 1, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                        <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>Notifications</Typography>
+                                        <Button size="small" onClick={handleMarkAllRead} disabled={unreadCount === 0}>Mark all read</Button>
+                                    </Box>
+                                    <Box sx={{ px: 1.5, pb: 1, display: 'flex', flexWrap: 'wrap', gap: 0.8 }}>
+                                        <Button
+                                            size="small"
+                                            variant={notificationFilter === 'all' ? 'contained' : 'outlined'}
+                                            onClick={() => setNotificationFilter('all')}
+                                        >
+                                            All
+                                        </Button>
+                                        <Button
+                                            size="small"
+                                            variant={notificationFilter === 'unread' ? 'contained' : 'outlined'}
+                                            onClick={() => setNotificationFilter('unread')}
+                                        >
+                                            Unread
+                                        </Button>
+                                        <Button
+                                            size="small"
+                                            variant={notificationFilter === 'due_soon' ? 'contained' : 'outlined'}
+                                            onClick={() => setNotificationFilter('due_soon')}
+                                        >
+                                            Due Soon
+                                        </Button>
+                                        <Button
+                                            size="small"
+                                            variant={notificationFilter === 'approvals' ? 'contained' : 'outlined'}
+                                            onClick={() => setNotificationFilter('approvals')}
+                                        >
+                                            Approvals
+                                        </Button>
+                                        <Button
+                                            size="small"
+                                            variant={notificationFilter === 'sla' ? 'contained' : 'outlined'}
+                                            onClick={() => setNotificationFilter('sla')}
+                                        >
+                                            SLA
+                                        </Button>
+                                    </Box>
+                                    <Divider />
+                                    {visibleNotifications.length === 0 && (
+                                        <MenuItem disabled>No notifications</MenuItem>
+                                    )}
+                                    {['Today', 'Yesterday', 'Older'].map((group) => {
+                                        const groupedItems = visibleNotifications.filter(
+                                            (notification) => getNotificationGroupLabel(notification.createdAt) === group
+                                        );
+                                        if (groupedItems.length === 0) return null;
+                                        return (
+                                            <Box key={group}>
+                                                <Typography
+                                                    variant="caption"
+                                                    sx={{ px: 1.5, py: 0.7, display: 'block', color: 'text.secondary', fontWeight: 700 }}
+                                                >
+                                                    {group}
+                                                </Typography>
+                                                {groupedItems.map((notification) => (
+                                                    <MenuItem
+                                                        key={notification._id}
+                                                        onClick={() => handleNotificationClick(notification)}
+                                                        sx={{
+                                                            whiteSpace: 'normal',
+                                                            alignItems: 'flex-start',
+                                                            bgcolor: notification.isRead ? 'transparent' : 'action.hover',
+                                                            gap: 1
+                                                        }}
+                                                    >
+                                                        {getNotificationIcon(notification.type)}
+                                                        <Box>
+                                                            <Typography variant="body2" sx={{ fontWeight: notification.isRead ? 500 : 700 }}>
+                                                                {notification.title}
+                                                            </Typography>
+                                                            <Typography variant="caption" color="text.secondary">
+                                                                {notification.message}
+                                                            </Typography>
+                                                            <Typography variant="caption" sx={{ display: 'block', color: 'text.disabled', mt: 0.3 }}>
+                                                                {formatTimeAgo(notification.createdAt)}
+                                                            </Typography>
+                                                        </Box>
+                                                    </MenuItem>
+                                                ))}
+                                            </Box>
+                                        );
+                                    })}
+                                    {hasMoreNotifications && (
+                                        <MenuItem onClick={handleLoadMoreNotifications} disabled={loadingNotifications}>
+                                            <Typography variant="body2" sx={{ color: 'primary.main', fontWeight: 600 }}>
+                                                {loadingNotifications ? 'Loading...' : 'Load more'}
+                                            </Typography>
+                                        </MenuItem>
+                                    )}
+                                </Menu>
                                 <IconButton onClick={(e) => setAnchorEl(e.currentTarget)} sx={{ p: 0.5 }}>
                                     <Avatar 
                                         src={avatarUrl}
