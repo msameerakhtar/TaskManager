@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { 
   TextField, Button, Typography, Paper, Container, 
-  Box, Link, Alert, CircularProgress, InputAdornment, IconButton, useTheme 
+  Box, Link, Alert, InputAdornment, IconButton, useTheme 
 } from '@mui/material';
+import CustomLoader from '../../components/CustomLoader';
 import { Visibility, VisibilityOff } from '@mui/icons-material';
 import LightModeIcon from '@mui/icons-material/LightMode';
 import DarkModeIcon from '@mui/icons-material/DarkMode';
@@ -140,7 +141,7 @@ const Login = ({ mode, setMode }) => {
                 boxShadow: `0 10px 20px ${theme.palette.primary.main}4D`
               }}
             >
-              {loading ? <CircularProgress size={24} color="inherit" /> : 'Sign In'}
+              {loading ? <CustomLoader size={24} sx={{ color: '#fff' }} /> : 'Sign In'}
             </Button>
           </form>
           

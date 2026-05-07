@@ -2,8 +2,10 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import axios from 'axios';
 import { io } from 'socket.io-client';
 import {
-  Paper, Typography, CircularProgress, Box, Chip, Button, Container, IconButton, useTheme, Grid, Card, CardContent, Stack, Snackbar, Alert, TextField, MenuItem, Avatar
+  Paper, Typography, Box, Chip, Button, Container, IconButton, useTheme, Grid, Card, CardContent, Stack, Snackbar, Alert, TextField, MenuItem, Avatar, Accordion, AccordionSummary, AccordionDetails
 } from '@mui/material';
+import CustomLoader from '../../components/CustomLoader';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
@@ -25,6 +27,7 @@ const TaskList = () => {
   const tasks = useSelector((state) => state.tasks.items);
   const loading = useSelector((state) => state.tasks.loading);
   const token = useSelector((state) => state.auth.token);
+  const currentUserId = useSelector((state) => state.auth.user?.id || state.auth.user?._id);
 
   const [openModal, setOpenModal] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
@@ -191,18 +194,28 @@ const TaskList = () => {
     const socketBaseUrl = API_BASE_URL.replace('/api', '');
     const socket = io(socketBaseUrl, {
       auth: { token },
-      transports: ['websocket']
+      transports: ['polling']
     });
     socketRef.current = socket;
 
     socket.on('task:changed', ({ projectId }) => {
       if (projectId && projectId === activeProjectRef.current) {
         fetchTasks();
+        fetchPhase4Data();
       }
     });
     socket.on('presence:update', ({ projectId, onlineCount: nextOnlineCount }) => {
       if (projectId && projectId === activeProjectRef.current) {
         setOnlineCount(nextOnlineCount || 0);
+      }
+    });
+    socket.on('notification:new', () => {
+      fetchNotifications();
+    });
+    socket.on('project:updated', ({ projectId }) => {
+      if (projectId && projectId === activeProjectRef.current) {
+        fetchProjects();
+        fetchPhase4Data();
       }
     });
 
@@ -400,6 +413,16 @@ const TaskList = () => {
     [projects, selectedProjectId]
   );
 
+  const currentUserRole = useMemo(() => {
+    if (!selectedProject || !currentUserId) return null;
+    const member = selectedProject.members?.find(
+      (m) => (m.userId?._id || m.userId)?.toString() === currentUserId.toString()
+    );
+    return member?.role || null;
+  }, [selectedProject, currentUserId]);
+
+  const isAdmin = currentUserRole === 'admin';
+
   const handleCreateProject = async () => {
     if (!newProjectName.trim()) return;
     try {
@@ -439,18 +462,17 @@ const TaskList = () => {
 
   if (loading && tasks.length === 0) return (
     <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '60vh' }}>
-      <CircularProgress thickness={4} size={50} sx={{ color: 'primary.main' }} />
+      <CustomLoader size={80} />
     </Box>
   );
 
   return (
     <Box sx={{ minHeight: '100vh', py: 4, bgcolor: 'background.default', transition: 'background-color 0.3s' }}>
       <Container maxWidth="lg">
+        {/* Header Section */}
         <Box sx={{ 
-          display: 'flex', 
-          flexDirection: { xs: 'column', sm: 'row' }, 
-          justifyContent: 'space-between', 
-          alignItems: { xs: 'flex-start', sm: 'center' }, 
+          display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, 
+          justifyContent: 'space-between', alignItems: { xs: 'flex-start', sm: 'center' }, 
           mb: 4, gap: 2 
         }}>
           <Box>
@@ -461,306 +483,330 @@ const TaskList = () => {
               Showing <span style={{ color: theme.palette.primary.main, fontWeight: 'bold' }}>{filteredTasks.length}</span> results
             </Typography>
           </Box>
-
           <Button
             variant="contained"
             startIcon={<AddIcon />}
             onClick={() => setOpenModal(true)}
             sx={{ 
               background: `linear-gradient(45deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,
-              fontWeight: 'bold', borderRadius: '12px', px: 3, py: 1.2,
-              textTransform: 'none',
+              fontWeight: 'bold', borderRadius: '12px', px: 3, py: 1.2, textTransform: 'none',
               boxShadow: `0 10px 20px ${theme.palette.primary.main}4D`,
-              '&:hover': { transform: 'translateY(-2px)', opacity: 0.9 },
-              transition: '0.2s'
+              '&:hover': { transform: 'translateY(-2px)', opacity: 0.9 }, transition: '0.2s'
             }}
           >
             Create Task
           </Button>
         </Box>
 
-        <SearchBar tasks={tasks} onFilter={setFilteredTasks} />
-        <Grid container spacing={2} sx={{ mb: 2 }}>
-          <Grid item xs={12} md={6}>
-            <TextField
-              select
-              fullWidth
-              label="Workspace / Project"
-              value={selectedProjectId}
-              onChange={(e) => setSelectedProjectId(e.target.value)}
-            >
-              {projects.map((project) => (
-                <MenuItem key={project._id} value={project._id}>{project.name}</MenuItem>
-              ))}
-            </TextField>
-          </Grid>
-          <Grid item xs={12} md={4}>
-            <TextField
-              fullWidth
-              label="New Workspace Name"
-              value={newProjectName}
-              onChange={(e) => setNewProjectName(e.target.value)}
-            />
-          </Grid>
-          <Grid item xs={12} md={2}>
-            <Button fullWidth variant="outlined" onClick={handleCreateProject} sx={{ height: '100%' }}>
-              Add Workspace
-            </Button>
-          </Grid>
-        </Grid>
-        {selectedProject && (
-          <Grid container spacing={2} sx={{ mb: 2 }}>
-            <Grid item xs={12} md={5}>
-              <TextField
-                fullWidth
-                label="Invite Member (email)"
-                value={inviteEmail}
-                onChange={(e) => setInviteEmail(e.target.value)}
-              />
-            </Grid>
-            <Grid item xs={12} md={3}>
-              <TextField
-                select
-                fullWidth
-                label="Role"
-                value={inviteRole}
-                onChange={(e) => setInviteRole(e.target.value)}
-              >
-                <MenuItem value="member">Member</MenuItem>
-                <MenuItem value="admin">Admin</MenuItem>
-              </TextField>
-            </Grid>
-            <Grid item xs={12} md={2}>
-              <Button fullWidth variant="outlined" onClick={handleInviteMember} sx={{ height: '100%' }}>
-                Add Member
-              </Button>
-            </Grid>
-            <Grid item xs={12} md={2}>
-              <Stack direction="row" spacing={1} alignItems="center" sx={{ height: '100%' }}>
-                <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                  Team: {selectedProject.members?.length || 0}
-                </Typography>
-                <Avatar sx={{ width: 10, height: 10, bgcolor: onlineCount > 0 ? 'success.main' : 'grey.500' }} />
-                <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                  {onlineCount} online
-                </Typography>
-              </Stack>
-            </Grid>
-          </Grid>
-        )}
-        <Grid container spacing={2} sx={{ mb: 2 }}>
-          <Grid item xs={6} md={3}><Paper sx={{ p: 2, borderRadius: '12px' }}><Typography variant="caption" color="text.secondary">Total</Typography><Typography variant="h6" fontWeight={800}>{kpis.total}</Typography></Paper></Grid>
-          <Grid item xs={6} md={3}><Paper sx={{ p: 2, borderRadius: '12px' }}><Typography variant="caption" color="text.secondary">Pending</Typography><Typography variant="h6" fontWeight={800}>{kpis.pending}</Typography></Paper></Grid>
-          <Grid item xs={6} md={3}><Paper sx={{ p: 2, borderRadius: '12px' }}><Typography variant="caption" color="text.secondary">Completed</Typography><Typography variant="h6" fontWeight={800}>{kpis.completed}</Typography></Paper></Grid>
-          <Grid item xs={6} md={3}><Paper sx={{ p: 2, borderRadius: '12px' }}><Typography variant="caption" color="text.secondary">Overdue</Typography><Typography variant="h6" fontWeight={800}>{kpis.overdue}</Typography></Paper></Grid>
-        </Grid>
-        <Paper
-          variant="outlined"
-          sx={{
-            p: 1.5,
-            mb: 2,
-            borderRadius: '12px',
-            borderColor: 'divider',
-            bgcolor: isDark ? 'rgba(99,102,241,0.08)' : 'rgba(99,102,241,0.06)'
-          }}
-        >
-          <Typography variant="body2" sx={{ color: 'text.primary', fontWeight: 600 }}>
-            Tip: Click a task card, then press ← / → arrow keys to move it between columns (or drag cards).
-          </Typography>
-        </Paper>
-        {calendarLinks && (
-          <Paper sx={{ p: 2, borderRadius: '12px', mb: 2 }}>
-            <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>Calendar Integration</Typography>
-            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
-              <Button size="small" variant="outlined" href={calendarLinks.googleCalendarUrl} target="_blank" rel="noreferrer">Sync Google</Button>
-              <Button size="small" variant="outlined" href={calendarLinks.outlookCalendarUrl} target="_blank" rel="noreferrer">Sync Outlook</Button>
-              <Button size="small" variant="outlined" href={calendarLinks.icsUrl} target="_blank" rel="noreferrer">Download ICS</Button>
-            </Stack>
-          </Paper>
-        )}
-        {selectedProject && (
-          <Paper sx={{ p: 2, borderRadius: '12px', mb: 2 }}>
-            <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>Workload View</Typography>
-            {!workloadReady && (
-              <Typography variant="body2" color="text.secondary">Loading workload…</Typography>
-            )}
-            {workloadReady && workloadError && (
-              <Alert severity="warning" sx={{ mb: workloadData.length ? 1 : 0 }}>{workloadError}</Alert>
-            )}
-            {workloadReady && !workloadError && workloadData.length === 0 && (
-              <Typography variant="body2" color="text.secondary">
-                Each workspace member is listed here with open assigned tasks and estimated hours.
-                If you only see this message, invite members and assign tasks using &quot;Assign To&quot; when creating or editing a task.
-              </Typography>
-            )}
-            {workloadData.length > 0 && (
-              <Stack spacing={1}>
-                {workloadData.map((member, idx) => (
-                  <Box
-                    key={member.userId ? String(member.userId) : `member-${idx}`}
-                    sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 1 }}
-                  >
-                    <Typography variant="body2">{member.name} ({member.role})</Typography>
-                    <Stack direction="row" spacing={1}>
-                      <Chip size="small" label={`${member.activeTasks} tasks`} />
-                      <Chip size="small" label={`${member.estimatedHours}h`} />
-                      {member.overloaded && <Chip size="small" color="error" label="Overloaded" />}
+        {/* Search & Filter Bar */}
+        <Box sx={{ mb: 3 }}>
+          <SearchBar tasks={tasks} onFilter={setFilteredTasks} />
+        </Box>
+
+        {/* Workspace Management Bar */}
+        <Paper sx={{ p: 2.5, mb: 4, borderRadius: '16px', border: '1px solid', borderColor: 'divider', bgcolor: isDark ? 'background.paper' : '#f8fafc' }} elevation={0}>
+            <Grid container spacing={3} alignItems="center">
+                <Grid size={{ xs: 12, md: 4 }}>
+                    <Typography variant="caption" sx={{ fontWeight: 'bold', mb: 1, display: 'block', color: 'text.secondary' }}>Current Workspace</Typography>
+                    <Stack direction="row" spacing={2} alignItems="center">
+                        <TextField
+                            select fullWidth size="small"
+                            value={selectedProjectId || ''}
+                            onChange={(e) => setSelectedProjectId(e.target.value)}
+                        >
+                            {projects.map((project) => (
+                                <MenuItem key={project._id} value={project._id}>{project.name}</MenuItem>
+                            ))}
+                        </TextField>
+                        {selectedProject && (
+                            <Stack direction="row" spacing={1} alignItems="center" sx={{ minWidth: 80 }}>
+                                <Avatar sx={{ width: 10, height: 10, bgcolor: onlineCount > 0 ? 'success.main' : 'grey.500' }} />
+                                <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 'bold', whiteSpace: 'nowrap' }}>
+                                    {onlineCount} online
+                                </Typography>
+                            </Stack>
+                        )}
                     </Stack>
-                  </Box>
-                ))}
-              </Stack>
-            )}
-          </Paper>
-        )}
-        {insights?.summary && (
-          <Paper sx={{ p: 2, borderRadius: '12px', mb: 2 }}>
-            <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>Productivity Insights</Typography>
-            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
-              <Chip label={`Avg completion: ${insights.summary.avgCompletionHours}h`} />
-              <Chip label={`Completed: ${insights.summary.completedTasks}`} color="success" />
-              <Chip label={`Overdue: ${insights.summary.overdueTasks}`} color="warning" />
-            </Stack>
-          </Paper>
-        )}
+                </Grid>
+                
+                <Grid size={{ xs: 12, md: 3 }} sx={{ opacity: isAdmin ? 1 : 0.5, pointerEvents: isAdmin ? 'auto' : 'none' }}>
+                    <Stack direction="row" spacing={0.5} alignItems="center" sx={{ mb: 1 }}>
+                        <Typography variant="caption" sx={{ fontWeight: 'bold', display: 'block', color: 'text.secondary' }}>Create New Workspace</Typography>
+                        {!isAdmin && <Chip label="Admin Only" size="small" variant="outlined" color="warning" sx={{ height: 20, fontSize: '0.65rem' }} />}
+                    </Stack>
+                    <Stack direction="row" spacing={1}>
+                        <TextField fullWidth size="small" placeholder="Workspace Name" value={newProjectName} onChange={(e) => setNewProjectName(e.target.value)} disabled={!isAdmin} />
+                        <Button variant="outlined" onClick={handleCreateProject} sx={{ minWidth: '90px' }} disabled={!isAdmin}>Create</Button>
+                    </Stack>
+                </Grid>
+
+                {selectedProject && (
+                    <Grid size={{ xs: 12, md: 5 }} sx={{ opacity: isAdmin ? 1 : 0.5, pointerEvents: isAdmin ? 'auto' : 'none' }}>
+                        <Stack direction="row" spacing={0.5} alignItems="center" sx={{ mb: 1 }}>
+                            <Typography variant="caption" sx={{ fontWeight: 'bold', display: 'block', color: 'text.secondary' }}>
+                                Invite to Workspace (Team Size: {selectedProject.members?.length || 0})
+                            </Typography>
+                            {!isAdmin && <Chip label="Admin Only" size="small" variant="outlined" color="warning" sx={{ height: 20, fontSize: '0.65rem' }} />}
+                        </Stack>
+                        <Stack direction="row" spacing={1}>
+                            <TextField fullWidth size="small" placeholder="Enter email address" value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} disabled={!isAdmin} />
+                            <TextField select size="small" value={inviteRole} onChange={(e) => setInviteRole(e.target.value)} sx={{ minWidth: '130px' }} disabled={!isAdmin}>
+                                <MenuItem value="member">Member</MenuItem>
+                                <MenuItem value="admin">Admin</MenuItem>
+                            </TextField>
+                            <Button variant="contained" color="primary" onClick={handleInviteMember} sx={{ minWidth: '100px', boxShadow: 'none' }} disabled={!isAdmin}>Invite</Button>
+                        </Stack>
+                    </Grid>
+                )}
+            </Grid>
+        </Paper>
+
+        {/* KPIs */}
+        <Grid container spacing={2} sx={{ mb: 4 }}>
+          {[
+            { title: 'Total Tasks', value: kpis.total, color: theme.palette.info.main, bg: isDark ? 'rgba(2, 136, 209, 0.1)' : '#e0f2fe' },
+            { title: 'Pending', value: kpis.pending, color: theme.palette.warning.main, bg: isDark ? 'rgba(237, 108, 2, 0.1)' : '#fef08a' },
+            { title: 'Completed', value: kpis.completed, color: theme.palette.success.main, bg: isDark ? 'rgba(46, 125, 50, 0.1)' : '#dcfce7' },
+            { title: 'Overdue', value: kpis.overdue, color: theme.palette.error.main, bg: isDark ? 'rgba(211, 47, 47, 0.1)' : '#fee2e2' }
+          ].map((kpi, index) => (
+              <Grid size={{ xs: 6, md: 3 }} key={index}>
+                  <Card elevation={0} sx={{ borderRadius: '16px', bgcolor: kpi.bg, border: `1px solid ${kpi.color}33`, transition: 'transform 0.2s', '&:hover': { transform: 'translateY(-4px)' } }}>
+                      <CardContent sx={{ textAlign: 'center', p: 3 }}>
+                          <Typography variant="body2" sx={{ color: 'text.secondary', fontWeight: 600, mb: 1, textTransform: 'uppercase', letterSpacing: 1 }}>{kpi.title}</Typography>
+                          <Typography variant="h3" sx={{ fontWeight: 900, color: kpi.color }}>{kpi.value}</Typography>
+                      </CardContent>
+                  </Card>
+              </Grid>
+          ))}
+        </Grid>
+
+        {/* Middle Section (Insights & Workload) */}
+        <Grid container spacing={3} sx={{ mb: 4 }}>
+            <Grid size={{ xs: 12, md: 7 }}>
+                <Stack spacing={3}>
+                    {insights?.summary && (
+                        <Paper elevation={0} sx={{ p: 3, borderRadius: '16px', border: '1px solid', borderColor: 'divider' }}>
+                            <Typography variant="h6" sx={{ fontWeight: 800, mb: 2 }}>Productivity Insights</Typography>
+                            <Grid container spacing={2}>
+                                <Grid size={{ xs: 4 }}>
+                                    <Box sx={{ textAlign: 'center', p: 2, bgcolor: isDark ? 'rgba(255,255,255,0.03)' : '#f8fafc', borderRadius: '12px' }}>
+                                        <Typography variant="h5" fontWeight="bold" color="primary">{insights.summary.avgCompletionHours}h</Typography>
+                                        <Typography variant="caption" color="text.secondary">Avg. Completion</Typography>
+                                    </Box>
+                                </Grid>
+                                <Grid size={{ xs: 4 }}>
+                                    <Box sx={{ textAlign: 'center', p: 2, bgcolor: isDark ? 'rgba(255,255,255,0.03)' : '#f8fafc', borderRadius: '12px' }}>
+                                        <Typography variant="h5" fontWeight="bold" color="success.main">{insights.summary.completedTasks}</Typography>
+                                        <Typography variant="caption" color="text.secondary">Tasks Done</Typography>
+                                    </Box>
+                                </Grid>
+                                <Grid size={{ xs: 4 }}>
+                                    <Box sx={{ textAlign: 'center', p: 2, bgcolor: isDark ? 'rgba(255,255,255,0.03)' : '#f8fafc', borderRadius: '12px' }}>
+                                        <Typography variant="h5" fontWeight="bold" color="error.main">{insights.summary.overdueTasks}</Typography>
+                                        <Typography variant="caption" color="text.secondary">Overdue</Typography>
+                                    </Box>
+                                </Grid>
+                            </Grid>
+                        </Paper>
+                    )}
+                    
+                    {calendarLinks && (
+                        <Paper elevation={0} sx={{ p: 3, borderRadius: '16px', border: '1px solid', borderColor: 'divider' }}>
+                            <Typography variant="h6" sx={{ fontWeight: 800, mb: 2 }}>Calendar Sync</Typography>
+                            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+                            <Button variant="contained" color="primary" href={calendarLinks.googleCalendarUrl} target="_blank" sx={{ borderRadius: '8px', textTransform: 'none' }}>Sync Google</Button>
+                            <Button variant="outlined" href={calendarLinks.outlookCalendarUrl} target="_blank" sx={{ borderRadius: '8px', textTransform: 'none' }}>Sync Outlook</Button>
+                            <Button variant="outlined" href={calendarLinks.icsUrl} target="_blank" sx={{ borderRadius: '8px', textTransform: 'none' }}>Download ICS</Button>
+                            </Stack>
+                        </Paper>
+                    )}
+                </Stack>
+            </Grid>
+
+            <Grid size={{ xs: 12, md: 5 }}>
+                {selectedProject && (
+                    <Paper elevation={0} sx={{ p: 3, borderRadius: '16px', border: '1px solid', borderColor: 'divider', height: '100%' }}>
+                        <Typography variant="h6" sx={{ fontWeight: 800, mb: 2 }}>Team Workload</Typography>
+                        {!workloadReady ? (
+                            <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}><CustomLoader size={30} /></Box>
+                        ) : workloadError ? (
+                            <Alert severity="warning">{workloadError}</Alert>
+                        ) : workloadData.length === 0 ? (
+                            <Typography variant="body2" color="text.secondary">No workload data available. Invite members and assign tasks.</Typography>
+                        ) : (
+                            <Stack spacing={2}>
+                                {workloadData.map((member, idx) => (
+                                    <Box key={idx} sx={{ p: 2, bgcolor: isDark ? 'rgba(255,255,255,0.03)' : '#f8fafc', borderRadius: '12px' }}>
+                                        <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                                            <Typography variant="subtitle2" fontWeight="bold">{member.name}</Typography>
+                                            <Typography variant="caption" color="text.secondary" sx={{ textTransform: 'capitalize' }}>{member.role}</Typography>
+                                        </Box>
+                                        <Stack direction="row" spacing={1}>
+                                            <Chip size="small" label={`${member.activeTasks} tasks`} sx={{ bgcolor: 'background.paper' }} />
+                                            <Chip size="small" label={`${member.estimatedHours} hrs`} sx={{ bgcolor: 'background.paper' }} />
+                                            {member.overloaded && <Chip size="small" color="error" label="Overloaded" />}
+                                        </Stack>
+                                    </Box>
+                                ))}
+                            </Stack>
+                        )}
+                    </Paper>
+                )}
+            </Grid>
+        </Grid>
+
         {notifications.filter((n) => !n.isRead).slice(0, 3).map((notification) => (
-          <Alert key={notification._id} severity="warning" sx={{ mb: 1 }}>
+          <Alert key={notification._id} severity="info" sx={{ mb: 2, borderRadius: '12px' }}>
             {notification.message}
           </Alert>
         ))}
-        <Grid container spacing={2}>
+
+        {/* Tip Box */}
+        <Paper variant="outlined" sx={{ p: 1.5, mb: 3, borderRadius: '12px', borderColor: 'primary.main', bgcolor: isDark ? 'rgba(99,102,241,0.05)' : 'rgba(99,102,241,0.05)' }}>
+          <Typography variant="body2" sx={{ color: 'primary.main', fontWeight: 600, textAlign: 'center' }}>
+            💡 Tip: Click a task card, then press ← / → arrow keys to move it between columns quickly (or drag cards).
+          </Typography>
+        </Paper>
+
+        {/* Kanban Board */}
+        <Grid container spacing={3}>
           {columns.map((column) => {
             const tasksInColumn = filteredTasks.filter((task) => task.status === column.key);
+            
+            // Define column theme colors
+            const colColor = column.key === 'todo' ? theme.palette.info.main : 
+                             column.key === 'in_progress' ? theme.palette.warning.main : 
+                             theme.palette.success.main;
+            const colBg = isDark ? `rgba(${column.key === 'todo' ? '2,136,209' : column.key === 'in_progress' ? '237,108,2' : '46,125,50'}, 0.05)` 
+                                 : `rgba(${column.key === 'todo' ? '2,136,209' : column.key === 'in_progress' ? '237,108,2' : '46,125,50'}, 0.03)`;
+
             return (
-              <Grid item xs={12} md={4} key={column.key}>
+              <Grid size={{ xs: 12, md: 4 }} key={column.key}>
                 <Paper
+                  elevation={0}
                   onDragOver={(event) => {
                     event.preventDefault();
-                    if (hoveredColumnKey !== column.key) {
-                      setHoveredColumnKey(column.key);
-                    }
+                    if (hoveredColumnKey !== column.key) setHoveredColumnKey(column.key);
                   }}
                   onDragLeave={() => {
-                    if (hoveredColumnKey === column.key) {
-                      setHoveredColumnKey(null);
-                    }
+                    if (hoveredColumnKey === column.key) setHoveredColumnKey(null);
                   }}
                   onDrop={(event) => handleDropToColumn(event, column.key)}
                   sx={{
                     p: 2,
-                    borderRadius: '18px',
-                    minHeight: 450,
+                    borderRadius: '20px',
+                    minHeight: '70vh',
                     border: '1px solid',
-                    borderColor: hoveredColumnKey === column.key ? 'primary.main' : 'divider',
-                    backgroundImage: 'none',
-                    bgcolor: hoveredColumnKey === column.key
-                      ? (isDark ? 'rgba(99,102,241,0.12)' : 'rgba(99,102,241,0.08)')
-                      : (isDark ? 'rgba(255,255,255,0.02)' : 'rgba(255,255,255,0.8)'),
-                    transition: 'border-color 0.2s ease, background-color 0.2s ease'
+                    borderColor: hoveredColumnKey === column.key ? colColor : 'divider',
+                    bgcolor: hoveredColumnKey === column.key ? `${colColor}22` : colBg,
+                    transition: 'all 0.3s ease',
+                    display: 'flex',
+                    flexDirection: 'column'
                   }}
                 >
-                  <Typography sx={{ fontWeight: 800, mb: 2 }}>
-                    {column.label} ({tasksInColumn.length})
-                  </Typography>
-                  {draggedTaskId && hoveredColumnKey === column.key && (
-                    <Typography
-                      variant="caption"
-                      sx={{
-                        display: 'block',
-                        mb: 1.5,
-                        color: 'primary.main',
-                        fontWeight: 700
-                      }}
-                    >
-                      Drop here
+                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3, pb: 1.5, borderBottom: '2px solid', borderColor: `${colColor}33` }}>
+                    <Typography component="div" sx={{ fontWeight: 800, color: 'text.primary', display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: colColor }} />
+                      {column.label}
                     </Typography>
+                    <Chip size="small" label={tasksInColumn.length} sx={{ fontWeight: 'bold', bgcolor: `${colColor}22`, color: colColor, borderRadius: '8px' }} />
+                  </Box>
+
+                  {draggedTaskId && hoveredColumnKey === column.key && (
+                    <Box sx={{ mb: 2, p: 2, border: '2px dashed', borderColor: colColor, borderRadius: '12px', textAlign: 'center', bgcolor: `${colColor}11` }}>
+                      <Typography variant="caption" sx={{ color: colColor, fontWeight: 700 }}>Drop task here</Typography>
+                    </Box>
                   )}
-                  <Stack spacing={1.5}>
+
+                  <Stack spacing={2} sx={{ flexGrow: 1 }}>
                     {tasksInColumn.map((task) => (
                       <Card
                         key={task.id}
                         id={`task-card-${task.id}`}
+                        elevation={0}
                         draggable={movingTaskId !== task.id}
                         onDragStart={(event) => handleDragStart(event, task.id)}
                         onDragEnd={handleDragEnd}
                         onKeyDown={(event) => handleCardKeyDown(event, task)}
                         tabIndex={0}
-                        role="button"
-                        aria-label={`${task.title || task.task || 'Task'} - use left and right arrow keys to move status`}
                         sx={{
-                          borderRadius: '12px',
+                          borderRadius: '16px',
                           border: '1px solid',
                           borderColor: 'divider',
+                          bgcolor: 'background.paper',
                           cursor: 'grab',
                           opacity: movingTaskId === task.id ? 0.6 : 1,
                           boxShadow: highlightedTaskId === task.id
-                            ? `0 0 0 2px ${theme.palette.primary.main}, 0 0 18px ${theme.palette.primary.main}66`
-                            : 'none',
-                          transition: 'box-shadow 0.25s ease',
-                          '&:focus-visible': {
-                            outline: `2px solid ${theme.palette.primary.main}`,
-                            outlineOffset: '2px'
+                            ? `0 0 0 2px ${theme.palette.primary.main}, 0 4px 20px ${theme.palette.primary.main}40`
+                            : isDark ? '0 4px 12px rgba(0,0,0,0.2)' : '0 4px 12px rgba(0,0,0,0.03)',
+                          transition: 'all 0.2s ease',
+                          '&:hover': {
+                            transform: 'translateY(-3px)',
+                            boxShadow: isDark ? '0 6px 16px rgba(0,0,0,0.4)' : '0 8px 24px rgba(0,0,0,0.08)',
+                            borderColor: colColor
                           },
-                          '&:active': { cursor: 'grabbing' }
+                          '&:focus-visible': { outline: `2px solid ${theme.palette.primary.main}`, outlineOffset: '2px' },
+                          '&:active': { cursor: 'grabbing', transform: 'scale(0.98)' }
                         }}
                       >
-                        <CardContent>
-                          <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
-                            {task.title || task.task || 'Untitled Task'}
-                          </Typography>
-                          <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mb: 1 }}>
-                            {task.description || 'No description'}
-                          </Typography>
-                          <Box sx={{ display: 'flex', gap: 1, mb: 1, flexWrap: 'wrap' }}>
-                            <Chip size="small" label={`Priority: ${task.priority || 'medium'}`} color={priorityColorMap[task.priority] || 'default'} />
-                            <Chip size="small" label={`Due: ${task.dueDate ? new Date(task.dueDate).toLocaleDateString() : 'N/A'}`} />
-                            {task.assigneeId?.fullName && <Chip size="small" label={`Assignee: ${task.assigneeId.fullName}`} />}
-                            {task.approvalStatus === 'pending' && (
-                              <Chip size="small" color="warning" label="Approval pending" />
-                            )}
-                            {task.approvalStatus === 'rejected' && (
-                              <Chip size="small" color="error" label="Completion rejected" />
-                            )}
-                            {(task.escalationLevel > 0) && (
-                              <Chip size="small" color="error" variant="outlined" label={`SLA L${task.escalationLevel}`} />
-                            )}
-                            {movingTaskId === task.id && (
-                              <Chip
-                                size="small"
-                                label="Moving..."
-                                color="info"
-                                sx={{
-                                  '@keyframes movingPulse': {
-                                    '0%': { opacity: 0.6, transform: 'scale(1)' },
-                                    '50%': { opacity: 1, transform: 'scale(1.03)' },
-                                    '100%': { opacity: 0.6, transform: 'scale(1)' }
-                                  },
-                                  animation: 'movingPulse 1.2s ease-in-out infinite'
-                                }}
-                              />
-                            )}
+                        <CardContent sx={{ p: 2.5, '&:last-child': { pb: 2.5 } }}>
+                          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
+                             <Typography variant="subtitle1" sx={{ fontWeight: 800, lineHeight: 1.3, color: 'text.primary' }}>
+                               {task.title || task.task || 'Untitled Task'}
+                             </Typography>
+                             <Box sx={{ display: 'flex', gap: 0.5 }}>
+                                {task.status !== 'done' && (
+                                  <IconButton
+                                    onClick={() => updateTaskStatus(task, 'done')}
+                                    size="small"
+                                    disabled={movingTaskId === task.id}
+                                    sx={{ color: 'success.main', bgcolor: 'success.main' + '1A', '&:hover': { bgcolor: 'success.main' + '33' }, width: 28, height: 28 }}
+                                    title="Mark Complete"
+                                  >
+                                    <CheckCircleOutlineIcon sx={{ fontSize: 18 }} />
+                                  </IconButton>
+                                )}
+                             </Box>
                           </Box>
-                          <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end' }}>
-                            {task.status !== 'done' && (
-                              <IconButton
-                                onClick={() => updateTaskStatus(task, 'done')}
-                                size="small"
-                                disabled={movingTaskId === task.id}
-                                sx={{ color: 'success.main', bgcolor: 'success.main' + '14' }}
-                                title="Mark Complete"
-                              >
-                                <CheckCircleOutlineIcon fontSize="small" />
+
+                          <Typography variant="body2" sx={{ color: 'text.secondary', mb: 2, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                            {task.description || 'No description provided.'}
+                          </Typography>
+
+                          <Box sx={{ display: 'flex', gap: 1, mb: 2, flexWrap: 'wrap' }}>
+                            <Chip size="small" label={task.priority?.toUpperCase() || 'MEDIUM'} sx={{ fontSize: '0.65rem', fontWeight: 800, letterSpacing: 0.5, color: priorityColorMap[task.priority] ? `${priorityColorMap[task.priority]}.main` : 'text.primary', bgcolor: priorityColorMap[task.priority] ? `${priorityColorMap[task.priority]}.main` + '1A' : 'action.selected' }} />
+                            {task.dueDate && <Chip size="small" label={new Date(task.dueDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} sx={{ fontSize: '0.65rem', fontWeight: 600, bgcolor: 'action.hover' }} />}
+                            {task.approvalStatus === 'pending' && <Chip size="small" color="warning" label="Approval pending" sx={{ fontSize: '0.65rem', fontWeight: 600 }} />}
+                            {task.approvalStatus === 'rejected' && <Chip size="small" color="error" label="Rejected" sx={{ fontSize: '0.65rem', fontWeight: 600 }} />}
+                            {task.escalationLevel > 0 && <Chip size="small" color="error" variant="outlined" label={`SLA L${task.escalationLevel}`} sx={{ fontSize: '0.65rem', fontWeight: 600 }} />}
+                          </Box>
+
+                          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', pt: 1.5, borderTop: '1px solid', borderColor: 'divider' }}>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                              {task.assigneeId ? (
+                                <>
+                                  <Avatar sx={{ width: 26, height: 26, fontSize: '0.75rem', bgcolor: 'primary.main', fontWeight: 'bold' }}>
+                                    {task.assigneeId.fullName ? task.assigneeId.fullName.charAt(0).toUpperCase() : 'A'}
+                                  </Avatar>
+                                  <Typography variant="caption" sx={{ fontWeight: 600, color: 'text.secondary' }}>
+                                    {task.assigneeId.fullName?.split(' ')[0] || 'Assignee'}
+                                  </Typography>
+                                </>
+                              ) : (
+                                <Typography variant="caption" sx={{ color: 'text.disabled', fontStyle: 'italic' }}>Unassigned</Typography>
+                              )}
+                            </Box>
+                            
+                            <Box sx={{ display: 'flex', gap: 0.5 }}>
+                              <IconButton onClick={() => handleEditClick(task)} size="small" disabled={movingTaskId === task.id} sx={{ color: 'text.secondary', '&:hover': { color: 'primary.main', bgcolor: 'primary.main' + '1A' } }}>
+                                <EditIcon sx={{ fontSize: 18 }} />
                               </IconButton>
-                            )}
-                            <IconButton onClick={() => handleEditClick(task)} size="small" disabled={movingTaskId === task.id} sx={{ color: 'primary.main', bgcolor: 'primary.main' + '0D' }}>
-                              <EditIcon fontSize="inherit" />
-                            </IconButton>
-                            {movingTaskId === task.id ? (
-                              <IconButton size="small" disabled sx={{ color: 'text.disabled', bgcolor: 'action.hover' }}>
-                                <CircularProgress size={16} />
-                              </IconButton>
-                            ) : (
-                              <DeleteTask taskId={task.id} onDeleteSuccess={fetchTasks} />
-                            )}
+                              {movingTaskId === task.id ? (
+                                <IconButton size="small" disabled><CustomLoader size={16} /></IconButton>
+                              ) : (
+                                <DeleteTask taskId={task.id} onDeleteSuccess={fetchTasks} />
+                              )}
+                            </Box>
                           </Box>
                         </CardContent>
                       </Card>

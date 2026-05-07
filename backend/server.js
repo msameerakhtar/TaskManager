@@ -22,9 +22,11 @@ const io = new Server(httpServer, {
     cors: {
         origin: '*',
         methods: ['GET', 'POST']
-    }
+    },
+    transports: ['polling', 'websocket']
 });
 app.set('io', io);
+global.io = io;
 const projectPresence = new Map();
 
 const emitPresence = (projectId) => {
@@ -95,6 +97,7 @@ io.use((socket, next) => {
 });
 
 io.on('connection', (socket) => {
+    socket.join(`user:${socket.user.id}`);
     socket.joinedProjects = new Set();
 
     socket.on('project:join', async ({ projectId }) => {

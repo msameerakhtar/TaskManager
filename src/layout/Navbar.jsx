@@ -2,7 +2,8 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { 
     AppBar, Toolbar, Typography, Avatar, Menu, MenuItem, IconButton, 
     Box, Container, Button, ListItemIcon, Drawer, List, ListItem, ListItemText,
-    ListItemButton, Stack, Badge, Divider
+    ListItemButton, Stack, Badge, Divider,
+    Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions
 } from '@mui/material';
 import { 
     Logout as LogoutIcon, 
@@ -22,6 +23,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { logout } from '../features/auth/authSlice';
 import axios from 'axios';
 import API_BASE_URL from '../config/api';
+import ProfileUpdateModal from '../features/auth/ProfileUpdateModal';
 
 const Navbar = ({ mode, toggleTheme }) => {
     const navigate = useNavigate();
@@ -39,6 +41,8 @@ const Navbar = ({ mode, toggleTheme }) => {
     const [unreadCount, setUnreadCount] = useState(0);
     const [loadingNotifications, setLoadingNotifications] = useState(false);
     const [notificationFilter, setNotificationFilter] = useState('all');
+    const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+    const [isLogoutDialogOpen, setIsLogoutDialogOpen] = useState(false);
 
     const isHomePage = location.pathname === '/';
     
@@ -53,7 +57,12 @@ const Navbar = ({ mode, toggleTheme }) => {
         { label: 'Blog', path: '/blog' },
     ];
 
-    const handleLogout = () => {
+    const handleLogoutClick = () => {
+        setAnchorEl(null);
+        setIsLogoutDialogOpen(true);
+    };
+
+    const handleConfirmLogout = () => {
         dispatch(logout());
         navigate('/login');
     };
@@ -408,11 +417,11 @@ const Navbar = ({ mode, toggleTheme }) => {
                                     onClose={() => setAnchorEl(null)}
                                     PaperProps={{ sx: { borderRadius: '12px', mt: 1.5, minWidth: 180, boxShadow: '0px 10px 20px rgba(0,0,0,0.1)' } }}
                                 >
-                                    <MenuItem onClick={() => { navigate('/profile'); setAnchorEl(null); }}>
+                                    <MenuItem onClick={() => { setIsProfileModalOpen(true); setAnchorEl(null); }}>
                                         <ListItemIcon><PersonIcon fontSize="small" /></ListItemIcon>
-                                        Profile
+                                        Profile Settings
                                     </MenuItem>
-                                    <MenuItem onClick={handleLogout}>
+                                    <MenuItem onClick={handleLogoutClick}>
                                         <ListItemIcon><LogoutIcon fontSize="small" color="error" /></ListItemIcon>
                                         Logout
                                     </MenuItem>
@@ -461,6 +470,39 @@ const Navbar = ({ mode, toggleTheme }) => {
                     </List>
                 </Box>
             </Drawer>
+            <ProfileUpdateModal 
+                open={isProfileModalOpen} 
+                handleClose={() => setIsProfileModalOpen(false)} 
+            />
+
+            {/* Logout Confirmation Dialog */}
+            <Dialog
+                open={isLogoutDialogOpen}
+                onClose={() => setIsLogoutDialogOpen(false)}
+                PaperProps={{
+                    sx: { borderRadius: '20px', p: 1, minWidth: 300 }
+                }}
+            >
+                <DialogTitle sx={{ fontWeight: 800 }}>Confirm Logout</DialogTitle>
+                <DialogContent>
+                    <DialogContentText>
+                        Are you sure you want to log out of your account?
+                    </DialogContentText>
+                </DialogContent>
+                <DialogActions sx={{ p: 2 }}>
+                    <Button onClick={() => setIsLogoutDialogOpen(false)} sx={{ color: 'text.secondary', textTransform: 'none', fontWeight: 600 }}>
+                        Cancel
+                    </Button>
+                    <Button 
+                        onClick={handleConfirmLogout} 
+                        variant="contained" 
+                        color="error" 
+                        sx={{ borderRadius: '10px', textTransform: 'none', fontWeight: 700, px: 3 }}
+                    >
+                        Logout
+                    </Button>
+                </DialogActions>
+            </Dialog>
         </AppBar>
     );
 };

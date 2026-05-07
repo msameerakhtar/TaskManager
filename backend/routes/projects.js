@@ -78,6 +78,9 @@ router.post('/:id/members', async (req, res) => {
 
         project.members.push({ userId: targetUser._id, role });
         await project.save();
+        if (req.app.get('io')) {
+            req.app.get('io').to(`project:${project._id}`).emit('project:updated', { projectId: project._id });
+        }
         await logAudit({
             actorId: req.user.id,
             projectId: project._id,

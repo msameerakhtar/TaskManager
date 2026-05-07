@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import axios from 'axios';
 import { 
-    IconButton, CircularProgress, Snackbar, Alert, Tooltip, 
+    IconButton, Snackbar, Alert, Tooltip, 
     Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions, Button, useTheme 
 } from '@mui/material';
+import CustomLoader from '../../components/CustomLoader';
 import DeleteIcon from '@mui/icons-material/Delete';
 
 import API_BASE_URL from '../../config/api';
@@ -68,7 +69,7 @@ const DeleteTask = ({ taskId, onDeleteSuccess }) => {
                         '&.Mui-disabled': { color: 'error.main' + '4D' }
                     }}
                 >
-                    {loading ? <CircularProgress size={20} sx={{ color: 'error.main' }} /> : <DeleteIcon fontSize="small" />}
+                    {loading ? <CustomLoader size={20} sx={{ color: 'error.main' }} /> : <DeleteIcon fontSize="small" />}
                 </IconButton>
             </Tooltip>
 

@@ -1,8 +1,9 @@
 import React, { lazy, Suspense, useState, useMemo } from 'react';
 import { createBrowserRouter, RouterProvider, Navigate } from 'react-router-dom';
-import { Box, CircularProgress, CssBaseline, ThemeProvider } from '@mui/material';
+import { Box, CssBaseline, ThemeProvider } from '@mui/material';
 import theme from './theme/index'; 
 import ProtectedRoute from './routes/ProtectedRoute';
+import CustomLoader from './components/CustomLoader';
 
 const Home = lazy(() => import('./pages/Home'));
 const Profile = lazy(() => import('./pages/Profile'));
@@ -16,7 +17,7 @@ const Enterprise = lazy(() => import('./pages/Enterprise'));
 
 const PageLoader = () => (
   <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '40vh' }}>
-    <CircularProgress />
+    <CustomLoader size={60} />
   </Box>
 );
 

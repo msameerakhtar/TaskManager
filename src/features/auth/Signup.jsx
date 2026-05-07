@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { 
   TextField, Button, Typography, Paper, Container, 
-  Box, Link, Alert, Avatar, CircularProgress, InputAdornment, IconButton, useTheme 
+  Box, Link, Alert, Avatar, InputAdornment, IconButton, useTheme 
 } from '@mui/material';
+import CustomLoader from '../../components/CustomLoader';
 import { PhotoCamera, Visibility, VisibilityOff } from '@mui/icons-material';
 import LightModeIcon from '@mui/icons-material/LightMode';
 import DarkModeIcon from '@mui/icons-material/DarkMode';
@@ -106,7 +107,7 @@ const Signup = ({ mode, setMode }) => {
             <TextField fullWidth label="Confirm Password" type={showPassword ? 'text' : 'password'} margin="normal" variant="filled" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} sx={{ '& .MuiFilledInput-root': { borderRadius: '12px' }, mb: 2 }} />
 
             <Button fullWidth variant="contained" type="submit" disabled={loading} sx={{ mt: 2, py: 1.8, borderRadius: '14px', background: `linear-gradient(45deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})` }}>
-              {loading ? <CircularProgress size={24} color="inherit" /> : 'Create Account'}
+              {loading ? <CustomLoader size={24} sx={{ color: '#fff' }} /> : 'Create Account'}
             </Button>
           </form>
           <Typography mt={4} sx={{ color: 'text.secondary' }}>

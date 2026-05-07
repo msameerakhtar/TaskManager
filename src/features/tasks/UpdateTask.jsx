@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { 
     Modal, Box, Typography, TextField, Button, 
-    Stack, MenuItem, CircularProgress, Snackbar, Alert, Backdrop, Fade, useTheme, Divider, List, ListItem, ListItemText
+    Stack, MenuItem, Snackbar, Alert, Backdrop, Fade, useTheme, Divider, List, ListItem, ListItemText
 } from '@mui/material';
+import CustomLoader from '../../components/CustomLoader';
 import axios from 'axios';
 import API_BASE_URL from '../../config/api';
 import { useSelector } from 'react-redux';
@@ -57,7 +58,9 @@ const UpdateTask = ({ open, handleClose, taskData, onUpdateSuccess, projectMembe
         top: '50%',
         left: '50%',
         transform: 'translate(-50%, -50%)',
-        width: { xs: '90%', sm: 450 },
+        width: { xs: '90%', sm: 500 },
+        maxHeight: '90vh',
+        overflowY: 'auto',
         bgcolor: 'background.paper',
         border: '1px solid',
         borderColor: 'divider',
@@ -65,6 +68,9 @@ const UpdateTask = ({ open, handleClose, taskData, onUpdateSuccess, projectMembe
         boxShadow: isDark ? '0 25px 50px -12px rgba(0, 0, 0, 0.5)' : '0 25px 50px -12px rgba(0, 0, 0, 0.1)',
         p: 4,
         backdropFilter: 'blur(10px)',
+        '&::-webkit-scrollbar': { display: 'none' },
+        msOverflowStyle: 'none',
+        scrollbarWidth: 'none',
     };
 
     const textFieldStyle = {
@@ -513,7 +519,7 @@ const UpdateTask = ({ open, handleClose, taskData, onUpdateSuccess, projectMembe
                                         opacity: isChanged ? 1 : 0.6
                                     }}
                                 >
-                                    {loading ? <CircularProgress size={24} sx={{ color: '#fff' }} /> : 'Update Task'}
+                                    {loading ? <CustomLoader size={24} sx={{ color: '#fff' }} /> : 'Update Task'}
                                 </Button>
                             </Stack>
                         </form>

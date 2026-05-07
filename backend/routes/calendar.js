@@ -61,7 +61,8 @@ router.get('/project/:projectId.ics', async (req, res) => {
 
 router.get('/project/:projectId/links', async (req, res) => {
     const baseUrl = `${req.protocol}://${req.get('host')}`;
-    const icsUrl = `${baseUrl}/api/calendar/project/${req.params.projectId}.ics`;
+    const token = req.header('x-auth-token');
+    const icsUrl = `${baseUrl}/api/calendar/project/${req.params.projectId}.ics?token=${token}`;
     const googleCalendarUrl = `https://calendar.google.com/calendar/u/0/r/settings/addbyurl?cid=${encodeURIComponent(icsUrl)}`;
     const outlookCalendarUrl = `https://outlook.live.com/calendar/0/addcalendar?url=${encodeURIComponent(icsUrl)}&name=${encodeURIComponent('TaskManager Project Calendar')}`;
     res.json({ icsUrl, googleCalendarUrl, outlookCalendarUrl });

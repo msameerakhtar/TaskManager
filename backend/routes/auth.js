@@ -4,6 +4,21 @@ const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 const authMiddleware = require('../middleware/authMiddleware');
 const Project = require('../models/Project');
+const multer = require('multer');
+const path = require('path');
+
+const storage = multer.diskStorage({
+    destination: (req, file, cb) => cb(null, 'uploads/'),
+    filename: (req, file, cb) => cb(null, `avatar-${req.user.id}-${Date.now()}${path.extname(file.originalname)}`)
+});
+const upload = multer({ 
+    storage,
+    limits: { fileSize: 2 * 1024 * 1024 }, // 2MB limit
+    fileFilter: (req, file, cb) => {
+        if (file.mimetype.startsWith('image/')) cb(null, true);
+        else cb(new Error('Only images are allowed'));
+    }
+});
 
 // @route   POST api/auth/signup
 // @desc    Register user
@@ -79,6 +94,63 @@ router.get('/me', authMiddleware, async (req, res) => {
     try {
         const user = await User.findById(req.user.id).select('-password');
         res.json(user);
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).send('Server Error');
+    }
+});
+
+// @route   POST api/auth/upload-avatar
+// @desc    Upload user avatar
+router.post('/upload-avatar', authMiddleware, upload.single('avatar'), async (req, res) => {
+    try {
+        if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
+        
+        const baseUrl = `${req.protocol}://${req.get('host')}`;
+        const avatarUrl = `${baseUrl}/uploads/${req.file.filename}`;
+        
+        res.json({ avatarUrl });
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).send('Server Error');
+    }
+});
+
+// @route   PUT api/auth/profile
+// @desc    Update user profile
+router.put('/profile', authMiddleware, async (req, res) => {
+    const { fullName, avatarUrl } = req.body;
+    try {
+        const user = await User.findById(req.user.id);
+        if (!user) return res.status(404).json({ message: 'User not found' });
+
+        if (fullName) user.fullName = fullName;
+        if (avatarUrl !== undefined) user.avatarUrl = avatarUrl;
+
+        await user.save();
+        res.json({ id: user._id, fullName: user.fullName, email: user.email, avatarUrl: user.avatarUrl });
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).send('Server Error');
+    }
+});
+
+// @route   PUT api/auth/change-password
+// @desc    Change user password
+router.put('/change-password', authMiddleware, async (req, res) => {
+    const { oldPassword, newPassword } = req.body;
+    try {
+        const user = await User.findById(req.user.id);
+        if (!user) return res.status(404).json({ message: 'User not found' });
+
+        const isMatch = await user.comparePassword(oldPassword);
+        if (!isMatch) {
+            return res.status(400).json({ message: 'Incorrect old password' });
+        }
+
+        user.password = newPassword;
+        await user.save();
+        res.json({ message: 'Password updated successfully' });
     } catch (err) {
         console.error(err.message);
         res.status(500).send('Server Error');

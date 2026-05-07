@@ -33,4 +33,10 @@ const notificationSchema = new mongoose.Schema({
 notificationSchema.index({ userId: 1, isRead: 1, createdAt: -1 });
 notificationSchema.index({ taskId: 1, type: 1, createdAt: -1 });
 
+notificationSchema.post('save', function(doc) {
+    if (global.io) {
+        global.io.to(`user:${doc.userId}`).emit('notification:new', doc);
+    }
+});
+
 module.exports = mongoose.model('Notification', notificationSchema);

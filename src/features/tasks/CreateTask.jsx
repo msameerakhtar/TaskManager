@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import {
     Modal, Box, Typography, TextField, Button,
-    Stack, Backdrop, Fade, CircularProgress, MenuItem,
+    Stack, Backdrop, Fade, MenuItem,
     Snackbar, Alert, useTheme
 } from '@mui/material';
+import CustomLoader from '../../components/CustomLoader';
 import axios from 'axios';
 import API_BASE_URL from '../../config/api';
 import { useSelector } from 'react-redux';
@@ -35,6 +36,10 @@ const CreateTask = ({ open, handleClose, refreshTasks, selectedProjectId, projec
         left: '50%',
         transform: 'translate(-50%, -50%)',
         width: { xs: '90%', sm: 450 },
+        maxHeight: '90vh',
+        overflowY: 'auto',
+        scrollbarWidth: 'none',
+        '&::-webkit-scrollbar': { display: 'none' },
         bgcolor: 'background.paper',
         border: '1px solid',
         borderColor: 'divider',
@@ -380,7 +385,7 @@ const CreateTask = ({ open, handleClose, refreshTasks, selectedProjectId, projec
                                         transition: 'all 0.2s'
                                     }}
                                 >
-                                    {loading ? <CircularProgress size={24} sx={{ color: '#fff' }} /> : 'Create Task'}
+                                    {loading ? <CustomLoader size={24} sx={{ color: '#fff' }} /> : 'Create Task'}
                                 </Button>
                             </Stack>
                         </form>
