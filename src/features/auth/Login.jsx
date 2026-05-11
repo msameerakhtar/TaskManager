@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { 
   TextField, Button, Typography, Paper, Container, 
   Box, Link, Alert, InputAdornment, IconButton, useTheme 
@@ -8,51 +8,58 @@ import { Visibility, VisibilityOff } from '@mui/icons-material';
 import LightModeIcon from '@mui/icons-material/LightMode';
 import DarkModeIcon from '@mui/icons-material/DarkMode';
 import { useNavigate, Link as RouterLink } from 'react-router-dom';
-import axios from 'axios';
-import API_BASE_URL from '../../config/api';
+import { useMutation } from '@tanstack/react-query';
+import { authApi } from '../../api/authApi';
 import { useDispatch } from 'react-redux';
 import { login } from '../auth/authSlice';
+import { useGoogleReCaptcha } from 'react-google-recaptcha-v3';
 
 const Login = ({ mode, setMode }) => {
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
   
+  const { executeRecaptcha } = useGoogleReCaptcha();
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
   
   const navigate = useNavigate();
   const dispatch = useDispatch();
 
-  const handleLogin = async (e) => {
+  const loginMutation = useMutation({
+    mutationFn: (data) => authApi.login(data).then(res => res.data),
+    onSuccess: ({ token, user }) => {
+      if (token) {
+        dispatch(login({ user, token }));
+        navigate('/tasks', { replace: true });
+      }
+    },
+    onError: (err) => {
+      setError(err.response?.data?.message || "An unexpected error occurred.");
+    },
+  });
+
+  const loading = loginMutation.isPending;
+
+  const handleLogin = useCallback(async (e) => {
     e.preventDefault();
     if (!email || !password) return setError("Please fill in all fields.");
     setError('');
-    setLoading(true);
 
-    try {
-      const response = await axios.post(`${API_BASE_URL}/auth/login`, {
-        email: email.trim(),
-        password,
-      });
-
-      const { token, user } = response.data;
-
-      if (token) {
-        dispatch(login({
-          user: user,
-          token: token
-        }));
-        navigate('/tasks', { replace: true });
-      }
-    } catch (err) {
-      setError(err.response?.data?.message || "An unexpected error occurred.");
-    } finally {
-      setLoading(false);
+    // Get reCAPTCHA v3 token silently
+    let recaptchaToken = '';
+    if (executeRecaptcha) {
+      recaptchaToken = await executeRecaptcha('login');
     }
-  };
+
+    loginMutation.mutate({
+      email: email.trim(),
+      password,
+      recaptchaToken,
+    });
+  }, [email, password, executeRecaptcha, loginMutation]);
 
   return (
     <Box sx={{ 

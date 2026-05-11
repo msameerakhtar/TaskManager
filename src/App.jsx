@@ -1,6 +1,7 @@
-import React, { lazy, Suspense, useState, useMemo } from 'react';
+import React, { lazy, Suspense, useState, useMemo, useCallback } from 'react';
 import { createBrowserRouter, RouterProvider, Navigate } from 'react-router-dom';
 import { Box, CssBaseline, ThemeProvider } from '@mui/material';
+import { GoogleReCaptchaProvider } from 'react-google-recaptcha-v3';
 import theme from './theme/index'; 
 import ProtectedRoute from './routes/ProtectedRoute';
 import CustomLoader from './components/CustomLoader';
@@ -29,19 +30,19 @@ const App = () => {
     return theme(currentMode);
   }, [mode]);
 
-  const toggleTheme = () => {
+  const toggleTheme = useCallback(() => {
     setMode((prev) => (prev === 'light' ? 'dark' : 'light'));
-  };
+  }, []);
 
-  const handleSetMode = (newMode) => {
+  const handleSetMode = useCallback((newMode) => {
     if (typeof newMode === 'string') {
       setMode(newMode);
     } else {
       setMode((prev) => (prev === 'light' ? 'dark' : 'light'));
     }
-  };
+  }, []);
 
-  const router = createBrowserRouter([
+  const router = useMemo(() => createBrowserRouter([
     { 
       path: "/", 
       element: <Home setMode={handleSetMode} mode={mode} /> 
@@ -69,14 +70,19 @@ const App = () => {
       ]
     },
     { path: "*", element: <Navigate to="/" replace /> }
-  ]);
+  ]), [mode, handleSetMode, toggleTheme]);
 
   return (
     <ThemeProvider theme={activeTheme}>
       <CssBaseline />
-      <Suspense fallback={<PageLoader />}>
-        <RouterProvider router={router} />
-      </Suspense>
+      <GoogleReCaptchaProvider
+        reCaptchaKey={import.meta.env.VITE_RECAPTCHA_SITE_KEY}
+        scriptProps={{ async: true, defer: true }}
+      >
+        <Suspense fallback={<PageLoader />}>
+          <RouterProvider router={router} />
+        </Suspense>
+      </GoogleReCaptchaProvider>
     </ThemeProvider>
   );
 };

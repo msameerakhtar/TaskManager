@@ -8,15 +8,18 @@ import { PhotoCamera, Visibility, VisibilityOff } from '@mui/icons-material';
 import LightModeIcon from '@mui/icons-material/LightMode';
 import DarkModeIcon from '@mui/icons-material/DarkMode';
 import { useNavigate, Link as RouterLink } from 'react-router-dom';
-import axios from 'axios';
-import API_BASE_URL from '../../config/api';
+import { useMutation } from '@tanstack/react-query';
+import { authApi } from '../../api/authApi';
 import { useDispatch } from 'react-redux';
 import { login } from '../auth/authSlice';
+import { useGoogleReCaptcha } from 'react-google-recaptcha-v3';
 
 const Signup = ({ mode, setMode }) => {
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
   
+  const { executeRecaptcha } = useGoogleReCaptcha();
+
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -25,10 +28,27 @@ const Signup = ({ mode, setMode }) => {
   const [imageFile, setImageFile] = useState(null);
   const [previewUrl, setPreviewUrl] = useState('');
   const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
   
   const navigate = useNavigate();
   const dispatch = useDispatch();
+
+  const signupMutation = useMutation({
+    mutationFn: (data) => authApi.signup(data).then(res => res.data),
+    onSuccess: ({ token, user }) => {
+      if (token) {
+        dispatch(login({ user, token }));
+        navigate('/tasks', { replace: true });
+      } else {
+        alert("Account created successfully! Please login.");
+        navigate('/login');
+      }
+    },
+    onError: (err) => {
+      setError(err.response?.data?.message || err.message || "Registration failed.");
+    },
+  });
+
+  const loading = signupMutation.isPending;
 
   useEffect(() => {
     return () => { if (previewUrl) URL.revokeObjectURL(previewUrl); };
@@ -47,33 +67,20 @@ const Signup = ({ mode, setMode }) => {
     e.preventDefault();
     setError('');
     if (password !== confirmPassword) return setError("Passwords do not match.");
-    setLoading(true);
 
-    try {
-      // Note: Backend image upload logic can be added later using Multer.
-      // For now, we'll just send the text data.
-      const response = await axios.post(`${API_BASE_URL}/auth/signup`, {
-        fullName: fullName.trim(),
-        email: email.trim(),
-        password,
-        avatarUrl: "" // Placeholder for now
-      });
-
-      const { token, user } = response.data;
-
-      if (token) {
-        dispatch(login({ user: user, token: token }));
-        navigate('/tasks', { replace: true });
-      } else {
-        alert("Account created successfully! Please login.");
-        navigate('/login');
-      }
-    } catch (err) {
-      const errorMsg = err.response?.data?.message || err.message || "Registration failed.";
-      setError(errorMsg);
-    } finally {
-      setLoading(false);
+    // Get reCAPTCHA v3 token silently
+    let recaptchaToken = '';
+    if (executeRecaptcha) {
+      recaptchaToken = await executeRecaptcha('signup');
     }
+
+    signupMutation.mutate({
+      fullName: fullName.trim(),
+      email: email.trim(),
+      password,
+      avatarUrl: "",
+      recaptchaToken,
+    });
   };
 
   return (

@@ -1,23 +1,31 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import axios from 'axios';
-import { io } from 'socket.io-client';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  Paper, Typography, Box, Chip, Button, Container, IconButton, useTheme, Grid, Card, CardContent, Stack, Snackbar, Alert, TextField, MenuItem, Avatar, Accordion, AccordionSummary, AccordionDetails
+  Paper, Typography, Box, Chip, Button, Container, IconButton, useTheme, Grid, Card, CardContent, Stack, Snackbar, Alert, ToggleButtonGroup, ToggleButton, Tooltip
 } from '@mui/material';
 import CustomLoader from '../../components/CustomLoader';
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import AddIcon from '@mui/icons-material/Add';
-import EditIcon from '@mui/icons-material/Edit';
-import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
+import ViewKanbanIcon from '@mui/icons-material/ViewKanban';
+import TableRowsIcon from '@mui/icons-material/TableRows';
+import ViewListIcon from '@mui/icons-material/ViewList';
 import CreateTask from './CreateTask';
 import SearchBar from './SearchBar'; 
 import UpdateTask from './UpdateTask';
-import DeleteTask from './DeleteTask';
+import WorkspaceBar from './WorkspaceBar';
+import InsightsPanel from './InsightsPanel';
+import TaskCard from './TaskCard';
+import TaskTableView from './TaskTableView';
+import TaskListView from './TaskListView';
+import useTaskSocket from './hooks/useTaskSocket';
 import { useDispatch, useSelector } from 'react-redux';
 import { useLocation } from 'react-router-dom';
 import { setTasks, setLoading as setReduxLoading } from '../../features/tasks/tasksSlice';
+import { taskApi } from '../../api/taskApi';
+import { projectApi } from '../../api/projectApi';
+import { notificationApi } from '../../api/notificationApi';
+import { insightsApi } from '../../api/insightsApi';
 
-import API_BASE_URL from '../../config/api';
+const VIEWS = ['kanban', 'table', 'list'];
+const VIEW_STORAGE_KEY = 'tm_task_view';
 
 const TaskList = () => {
   const theme = useTheme();
@@ -28,6 +36,17 @@ const TaskList = () => {
   const loading = useSelector((state) => state.tasks.loading);
   const token = useSelector((state) => state.auth.token);
   const currentUserId = useSelector((state) => state.auth.user?.id || state.auth.user?._id);
+
+  const [viewMode, setViewMode] = useState(() => {
+    const saved = localStorage.getItem(VIEW_STORAGE_KEY);
+    return VIEWS.includes(saved) ? saved : 'kanban';
+  });
+
+  const handleViewChange = (_, newView) => {
+    if (!newView) return;
+    setViewMode(newView);
+    localStorage.setItem(VIEW_STORAGE_KEY, newView);
+  };
 
   const [openModal, setOpenModal] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
@@ -44,8 +63,6 @@ const TaskList = () => {
   const [newProjectName, setNewProjectName] = useState('');
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState('member');
-  const socketRef = useRef(null);
-  const activeProjectRef = useRef(null);
   const [onlineCount, setOnlineCount] = useState(0);
   const [workloadData, setWorkloadData] = useState([]);
   const [workloadError, setWorkloadError] = useState(null);
@@ -71,19 +88,13 @@ const TaskList = () => {
     done: 'Done'
   };
 
-  const priorityColorMap = {
-    low: 'success',
-    medium: 'warning',
-    high: 'error'
-  };
+  // ─── Data Fetching ────────────────────────────────────────
 
   const fetchTasks = useCallback(async () => {
     if (!selectedProjectId) return;
     dispatch(setReduxLoading(true));
     try {
-      const response = await axios.get(`${API_BASE_URL}/tasks?projectId=${selectedProjectId}`, {
-        headers: { 'x-auth-token': token }
-      });
+      const response = await taskApi.getTasks(selectedProjectId);
       const validTasks = response.data.map((t) => ({
         ...t,
         id: t._id,
@@ -97,13 +108,11 @@ const TaskList = () => {
     } finally {
       dispatch(setReduxLoading(false));
     }
-  }, [dispatch, token, selectedProjectId]);
+  }, [dispatch, selectedProjectId]);
 
   const fetchProjects = useCallback(async () => {
     try {
-      const response = await axios.get(`${API_BASE_URL}/projects`, {
-        headers: { 'x-auth-token': token }
-      });
+      const response = await projectApi.getProjects();
       const projectList = response.data || [];
       setProjects(projectList);
 
@@ -119,13 +128,11 @@ const TaskList = () => {
     } catch (error) {
       console.error('Project fetch error:', error);
     }
-  }, [token, location.search, selectedProjectId]);
+  }, [location.search, selectedProjectId]);
 
   const fetchNotifications = useCallback(async () => {
     try {
-      const response = await axios.get(`${API_BASE_URL}/notifications`, {
-        headers: { 'x-auth-token': token }
-      });
+      const response = await notificationApi.getNotifications();
       const payload = response.data;
       if (Array.isArray(payload)) {
         setNotifications(payload);
@@ -135,17 +142,16 @@ const TaskList = () => {
     } catch (error) {
       console.error('Notification fetch error:', error);
     }
-  }, [token]);
+  }, []);
 
   const fetchPhase4Data = useCallback(async () => {
     if (!selectedProjectId || !token) return;
     setWorkloadReady(false);
     setWorkloadError(null);
-    const headers = { headers: { 'x-auth-token': token } };
     const results = await Promise.allSettled([
-      axios.get(`${API_BASE_URL}/insights/workload/${selectedProjectId}`, headers),
-      axios.get(`${API_BASE_URL}/insights/productivity/${selectedProjectId}`, headers),
-      axios.get(`${API_BASE_URL}/calendar/project/${selectedProjectId}/links`, headers)
+      insightsApi.getWorkload(selectedProjectId),
+      insightsApi.getProductivity(selectedProjectId),
+      insightsApi.getCalendarLinks(selectedProjectId)
     ]);
 
     const [wl, prod, cal] = results;
@@ -177,7 +183,9 @@ const TaskList = () => {
       console.error('Calendar links fetch failed:', cal.reason?.message || cal.reason);
       setCalendarLinks(null);
     }
-  }, [selectedProjectId, token]);
+  }, [selectedProjectId]);
+
+  // ─── Effects ──────────────────────────────────────────────
 
   useEffect(() => {
     fetchProjects();
@@ -189,55 +197,16 @@ const TaskList = () => {
     fetchPhase4Data();
   }, [fetchTasks, fetchNotifications, fetchPhase4Data, selectedProjectId]);
 
-  useEffect(() => {
-    if (!token) return undefined;
-    const socketBaseUrl = API_BASE_URL.replace('/api', '');
-    const socket = io(socketBaseUrl, {
-      auth: { token },
-      transports: ['polling']
-    });
-    socketRef.current = socket;
-
-    socket.on('task:changed', ({ projectId }) => {
-      if (projectId && projectId === activeProjectRef.current) {
-        fetchTasks();
-        fetchPhase4Data();
-      }
-    });
-    socket.on('presence:update', ({ projectId, onlineCount: nextOnlineCount }) => {
-      if (projectId && projectId === activeProjectRef.current) {
-        setOnlineCount(nextOnlineCount || 0);
-      }
-    });
-    socket.on('notification:new', () => {
-      fetchNotifications();
-    });
-    socket.on('project:updated', ({ projectId }) => {
-      if (projectId && projectId === activeProjectRef.current) {
-        fetchProjects();
-        fetchPhase4Data();
-      }
-    });
-
-    return () => {
-      if (activeProjectRef.current) {
-        socket.emit('project:leave', { projectId: activeProjectRef.current });
-      }
-      socket.disconnect();
-      socketRef.current = null;
-    };
-  }, [token, fetchTasks]);
-
-  useEffect(() => {
-    const socket = socketRef.current;
-    if (!socket || !selectedProjectId) return;
-    if (activeProjectRef.current && activeProjectRef.current !== selectedProjectId) {
-      socket.emit('project:leave', { projectId: activeProjectRef.current });
-    }
-    socket.emit('project:join', { projectId: selectedProjectId });
-    activeProjectRef.current = selectedProjectId;
-    setOnlineCount(0);
-  }, [selectedProjectId]);
+  // Socket.io (extracted hook)
+  useTaskSocket({
+    token,
+    selectedProjectId,
+    fetchTasks,
+    fetchProjects,
+    fetchNotifications,
+    fetchPhase4Data,
+    setOnlineCount
+  });
 
   useEffect(() => {
     setFilteredTasks(tasks);
@@ -294,6 +263,8 @@ const TaskList = () => {
     return () => clearTimeout(timer);
   }, [location.search, tasks]);
 
+  // ─── Handlers ─────────────────────────────────────────────
+
   const handleEditClick = (task) => {
     setSelectedTask(task);
     setIsEditOpen(true);
@@ -320,18 +291,14 @@ const TaskList = () => {
       const fallbackDueDate = task.dueDate
         ? new Date(task.dueDate).toISOString().split('T')[0]
         : new Date().toISOString().split('T')[0];
-      const { data } = await axios.put(
-        `${API_BASE_URL}/tasks/${task.id}`,
-        {
+      const { data } = await taskApi.updateTask(task.id, {
           title: task.title || task.task || '',
           description: task.description || '',
           status,
           priority: task.priority || 'medium',
           dueDate: fallbackDueDate,
           projectId: selectedProjectId || task.projectId
-        },
-        { headers: { 'x-auth-token': token } }
-      );
+        });
       if (data?.requiresApproval) {
         dispatch(setTasks(previousTasks));
         setFilteredTasks(previousFilteredTasks);
@@ -399,6 +366,12 @@ const TaskList = () => {
     await updateTaskStatus(task, statusOrder[nextIndex]);
   };
 
+  const handleMarkDone = useCallback((task) => {
+    updateTaskStatus(task, 'done');
+  }, [updateTaskStatus]);
+
+  // ─── Computed Values ──────────────────────────────────────
+
   const kpis = useMemo(() => {
     const now = new Date();
     const total = tasks.length;
@@ -423,14 +396,12 @@ const TaskList = () => {
 
   const isAdmin = currentUserRole === 'admin';
 
+  // ─── Workspace Actions ────────────────────────────────────
+
   const handleCreateProject = async () => {
     if (!newProjectName.trim()) return;
     try {
-      const response = await axios.post(`${API_BASE_URL}/projects`, {
-        name: newProjectName.trim()
-      }, {
-        headers: { 'x-auth-token': token }
-      });
+      const response = await projectApi.createProject(newProjectName.trim());
       const created = response.data;
       setProjects((prev) => [created, ...prev]);
       setSelectedProjectId(created._id);
@@ -444,12 +415,7 @@ const TaskList = () => {
   const handleInviteMember = async () => {
     if (!selectedProjectId || !inviteEmail.trim()) return;
     try {
-      const response = await axios.post(`${API_BASE_URL}/projects/${selectedProjectId}/members`, {
-        email: inviteEmail.trim(),
-        role: inviteRole
-      }, {
-        headers: { 'x-auth-token': token }
-      });
+      const response = await projectApi.inviteMember(selectedProjectId, inviteEmail.trim(), inviteRole);
       const updated = response.data;
       setProjects((prev) => prev.map((p) => p._id === updated._id ? updated : p));
       setInviteEmail('');
@@ -459,6 +425,8 @@ const TaskList = () => {
       setFeedback({ open: true, message: error.response?.data?.message || 'Failed to add member.', severity: 'error' });
     }
   };
+
+  // ─── Render ───────────────────────────────────────────────
 
   if (loading && tasks.length === 0) return (
     <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '60vh' }}>
@@ -483,19 +451,61 @@ const TaskList = () => {
               Showing <span style={{ color: theme.palette.primary.main, fontWeight: 'bold' }}>{filteredTasks.length}</span> results
             </Typography>
           </Box>
-          <Button
-            variant="contained"
-            startIcon={<AddIcon />}
-            onClick={() => setOpenModal(true)}
-            sx={{ 
-              background: `linear-gradient(45deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,
-              fontWeight: 'bold', borderRadius: '12px', px: 3, py: 1.2, textTransform: 'none',
-              boxShadow: `0 10px 20px ${theme.palette.primary.main}4D`,
-              '&:hover': { transform: 'translateY(-2px)', opacity: 0.9 }, transition: '0.2s'
-            }}
-          >
-            Create Task
-          </Button>
+          <Stack direction="row" spacing={1.5} alignItems="center">
+            {/* View Toggle */}
+            <ToggleButtonGroup
+              value={viewMode}
+              exclusive
+              onChange={handleViewChange}
+              size="small"
+              sx={{
+                bgcolor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)',
+                borderRadius: '10px',
+                '& .MuiToggleButton-root': {
+                  border: 'none',
+                  borderRadius: '10px !important',
+                  px: 1.5,
+                  py: 0.8,
+                  color: 'text.secondary',
+                  '&.Mui-selected': {
+                    bgcolor: 'primary.main',
+                    color: 'white',
+                    '&:hover': { bgcolor: 'primary.dark' },
+                  },
+                },
+              }}
+            >
+              <Tooltip title="Kanban Board">
+                <ToggleButton value="kanban">
+                  <ViewKanbanIcon fontSize="small" />
+                </ToggleButton>
+              </Tooltip>
+              <Tooltip title="Table View">
+                <ToggleButton value="table">
+                  <TableRowsIcon fontSize="small" />
+                </ToggleButton>
+              </Tooltip>
+              <Tooltip title="List View">
+                <ToggleButton value="list">
+                  <ViewListIcon fontSize="small" />
+                </ToggleButton>
+              </Tooltip>
+            </ToggleButtonGroup>
+
+            <Button
+              variant="contained"
+              startIcon={<AddIcon />}
+              onClick={() => setOpenModal(true)}
+              sx={{ 
+                background: `linear-gradient(45deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,
+                fontWeight: 'bold', borderRadius: '12px', px: 3, py: 1.2, textTransform: 'none',
+                boxShadow: `0 10px 20px ${theme.palette.primary.main}4D`,
+                '&:hover': { transform: 'translateY(-2px)', opacity: 0.9 }, transition: '0.2s'
+              }}
+            >
+              Create Task
+            </Button>
+          </Stack>
         </Box>
 
         {/* Search & Filter Bar */}
@@ -504,62 +514,23 @@ const TaskList = () => {
         </Box>
 
         {/* Workspace Management Bar */}
-        <Paper sx={{ p: 2.5, mb: 4, borderRadius: '16px', border: '1px solid', borderColor: 'divider', bgcolor: isDark ? 'background.paper' : '#f8fafc' }} elevation={0}>
-            <Grid container spacing={3} alignItems="center">
-                <Grid size={{ xs: 12, md: 4 }}>
-                    <Typography variant="caption" sx={{ fontWeight: 'bold', mb: 1, display: 'block', color: 'text.secondary' }}>Current Workspace</Typography>
-                    <Stack direction="row" spacing={2} alignItems="center">
-                        <TextField
-                            select fullWidth size="small"
-                            value={selectedProjectId || ''}
-                            onChange={(e) => setSelectedProjectId(e.target.value)}
-                        >
-                            {projects.map((project) => (
-                                <MenuItem key={project._id} value={project._id}>{project.name}</MenuItem>
-                            ))}
-                        </TextField>
-                        {selectedProject && (
-                            <Stack direction="row" spacing={1} alignItems="center" sx={{ minWidth: 80 }}>
-                                <Avatar sx={{ width: 10, height: 10, bgcolor: onlineCount > 0 ? 'success.main' : 'grey.500' }} />
-                                <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 'bold', whiteSpace: 'nowrap' }}>
-                                    {onlineCount} online
-                                </Typography>
-                            </Stack>
-                        )}
-                    </Stack>
-                </Grid>
-                
-                <Grid size={{ xs: 12, md: 3 }} sx={{ opacity: isAdmin ? 1 : 0.5, pointerEvents: isAdmin ? 'auto' : 'none' }}>
-                    <Stack direction="row" spacing={0.5} alignItems="center" sx={{ mb: 1 }}>
-                        <Typography variant="caption" sx={{ fontWeight: 'bold', display: 'block', color: 'text.secondary' }}>Create New Workspace</Typography>
-                        {!isAdmin && <Chip label="Admin Only" size="small" variant="outlined" color="warning" sx={{ height: 20, fontSize: '0.65rem' }} />}
-                    </Stack>
-                    <Stack direction="row" spacing={1}>
-                        <TextField fullWidth size="small" placeholder="Workspace Name" value={newProjectName} onChange={(e) => setNewProjectName(e.target.value)} disabled={!isAdmin} />
-                        <Button variant="outlined" onClick={handleCreateProject} sx={{ minWidth: '90px' }} disabled={!isAdmin}>Create</Button>
-                    </Stack>
-                </Grid>
-
-                {selectedProject && (
-                    <Grid size={{ xs: 12, md: 5 }} sx={{ opacity: isAdmin ? 1 : 0.5, pointerEvents: isAdmin ? 'auto' : 'none' }}>
-                        <Stack direction="row" spacing={0.5} alignItems="center" sx={{ mb: 1 }}>
-                            <Typography variant="caption" sx={{ fontWeight: 'bold', display: 'block', color: 'text.secondary' }}>
-                                Invite to Workspace (Team Size: {selectedProject.members?.length || 0})
-                            </Typography>
-                            {!isAdmin && <Chip label="Admin Only" size="small" variant="outlined" color="warning" sx={{ height: 20, fontSize: '0.65rem' }} />}
-                        </Stack>
-                        <Stack direction="row" spacing={1}>
-                            <TextField fullWidth size="small" placeholder="Enter email address" value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} disabled={!isAdmin} />
-                            <TextField select size="small" value={inviteRole} onChange={(e) => setInviteRole(e.target.value)} sx={{ minWidth: '130px' }} disabled={!isAdmin}>
-                                <MenuItem value="member">Member</MenuItem>
-                                <MenuItem value="admin">Admin</MenuItem>
-                            </TextField>
-                            <Button variant="contained" color="primary" onClick={handleInviteMember} sx={{ minWidth: '100px', boxShadow: 'none' }} disabled={!isAdmin}>Invite</Button>
-                        </Stack>
-                    </Grid>
-                )}
-            </Grid>
-        </Paper>
+        <WorkspaceBar
+          projects={projects}
+          selectedProjectId={selectedProjectId}
+          setSelectedProjectId={setSelectedProjectId}
+          selectedProject={selectedProject}
+          onlineCount={onlineCount}
+          isAdmin={isAdmin}
+          newProjectName={newProjectName}
+          setNewProjectName={setNewProjectName}
+          handleCreateProject={handleCreateProject}
+          inviteEmail={inviteEmail}
+          setInviteEmail={setInviteEmail}
+          inviteRole={inviteRole}
+          setInviteRole={setInviteRole}
+          handleInviteMember={handleInviteMember}
+          isDark={isDark}
+        />
 
         {/* KPIs */}
         <Grid container spacing={2} sx={{ mb: 4 }}>
@@ -580,80 +551,16 @@ const TaskList = () => {
           ))}
         </Grid>
 
-        {/* Middle Section (Insights & Workload) */}
-        <Grid container spacing={3} sx={{ mb: 4 }}>
-            <Grid size={{ xs: 12, md: 7 }}>
-                <Stack spacing={3}>
-                    {insights?.summary && (
-                        <Paper elevation={0} sx={{ p: 3, borderRadius: '16px', border: '1px solid', borderColor: 'divider' }}>
-                            <Typography variant="h6" sx={{ fontWeight: 800, mb: 2 }}>Productivity Insights</Typography>
-                            <Grid container spacing={2}>
-                                <Grid size={{ xs: 4 }}>
-                                    <Box sx={{ textAlign: 'center', p: 2, bgcolor: isDark ? 'rgba(255,255,255,0.03)' : '#f8fafc', borderRadius: '12px' }}>
-                                        <Typography variant="h5" fontWeight="bold" color="primary">{insights.summary.avgCompletionHours}h</Typography>
-                                        <Typography variant="caption" color="text.secondary">Avg. Completion</Typography>
-                                    </Box>
-                                </Grid>
-                                <Grid size={{ xs: 4 }}>
-                                    <Box sx={{ textAlign: 'center', p: 2, bgcolor: isDark ? 'rgba(255,255,255,0.03)' : '#f8fafc', borderRadius: '12px' }}>
-                                        <Typography variant="h5" fontWeight="bold" color="success.main">{insights.summary.completedTasks}</Typography>
-                                        <Typography variant="caption" color="text.secondary">Tasks Done</Typography>
-                                    </Box>
-                                </Grid>
-                                <Grid size={{ xs: 4 }}>
-                                    <Box sx={{ textAlign: 'center', p: 2, bgcolor: isDark ? 'rgba(255,255,255,0.03)' : '#f8fafc', borderRadius: '12px' }}>
-                                        <Typography variant="h5" fontWeight="bold" color="error.main">{insights.summary.overdueTasks}</Typography>
-                                        <Typography variant="caption" color="text.secondary">Overdue</Typography>
-                                    </Box>
-                                </Grid>
-                            </Grid>
-                        </Paper>
-                    )}
-                    
-                    {calendarLinks && (
-                        <Paper elevation={0} sx={{ p: 3, borderRadius: '16px', border: '1px solid', borderColor: 'divider' }}>
-                            <Typography variant="h6" sx={{ fontWeight: 800, mb: 2 }}>Calendar Sync</Typography>
-                            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
-                            <Button variant="contained" color="primary" href={calendarLinks.googleCalendarUrl} target="_blank" sx={{ borderRadius: '8px', textTransform: 'none' }}>Sync Google</Button>
-                            <Button variant="outlined" href={calendarLinks.outlookCalendarUrl} target="_blank" sx={{ borderRadius: '8px', textTransform: 'none' }}>Sync Outlook</Button>
-                            <Button variant="outlined" href={calendarLinks.icsUrl} target="_blank" sx={{ borderRadius: '8px', textTransform: 'none' }}>Download ICS</Button>
-                            </Stack>
-                        </Paper>
-                    )}
-                </Stack>
-            </Grid>
-
-            <Grid size={{ xs: 12, md: 5 }}>
-                {selectedProject && (
-                    <Paper elevation={0} sx={{ p: 3, borderRadius: '16px', border: '1px solid', borderColor: 'divider', height: '100%' }}>
-                        <Typography variant="h6" sx={{ fontWeight: 800, mb: 2 }}>Team Workload</Typography>
-                        {!workloadReady ? (
-                            <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}><CustomLoader size={30} /></Box>
-                        ) : workloadError ? (
-                            <Alert severity="warning">{workloadError}</Alert>
-                        ) : workloadData.length === 0 ? (
-                            <Typography variant="body2" color="text.secondary">No workload data available. Invite members and assign tasks.</Typography>
-                        ) : (
-                            <Stack spacing={2}>
-                                {workloadData.map((member, idx) => (
-                                    <Box key={idx} sx={{ p: 2, bgcolor: isDark ? 'rgba(255,255,255,0.03)' : '#f8fafc', borderRadius: '12px' }}>
-                                        <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                                            <Typography variant="subtitle2" fontWeight="bold">{member.name}</Typography>
-                                            <Typography variant="caption" color="text.secondary" sx={{ textTransform: 'capitalize' }}>{member.role}</Typography>
-                                        </Box>
-                                        <Stack direction="row" spacing={1}>
-                                            <Chip size="small" label={`${member.activeTasks} tasks`} sx={{ bgcolor: 'background.paper' }} />
-                                            <Chip size="small" label={`${member.estimatedHours} hrs`} sx={{ bgcolor: 'background.paper' }} />
-                                            {member.overloaded && <Chip size="small" color="error" label="Overloaded" />}
-                                        </Stack>
-                                    </Box>
-                                ))}
-                            </Stack>
-                        )}
-                    </Paper>
-                )}
-            </Grid>
-        </Grid>
+        {/* Insights & Workload */}
+        <InsightsPanel
+          insights={insights}
+          calendarLinks={calendarLinks}
+          workloadData={workloadData}
+          workloadReady={workloadReady}
+          workloadError={workloadError}
+          selectedProject={selectedProject}
+          isDark={isDark}
+        />
 
         {notifications.filter((n) => !n.isRead).slice(0, 3).map((notification) => (
           <Alert key={notification._id} severity="info" sx={{ mb: 2, borderRadius: '12px' }}>
@@ -661,167 +568,106 @@ const TaskList = () => {
           </Alert>
         ))}
 
-        {/* Tip Box */}
+        {/* Tip Box — changes based on view */}
         <Paper variant="outlined" sx={{ p: 1.5, mb: 3, borderRadius: '12px', borderColor: 'primary.main', bgcolor: isDark ? 'rgba(99,102,241,0.05)' : 'rgba(99,102,241,0.05)' }}>
           <Typography variant="body2" sx={{ color: 'primary.main', fontWeight: 600, textAlign: 'center' }}>
-            💡 Tip: Click a task card, then press ← / → arrow keys to move it between columns quickly (or drag cards).
+            {viewMode === 'kanban' && '💡 Tip: Click a task card, then press ← / → arrow keys to move it between columns quickly (or drag cards).'}
+            {viewMode === 'table'  && '💡 Tip: Click any column header to sort tasks. Use the action buttons on the right to edit, complete or delete.'}
+            {viewMode === 'list'   && '💡 Tip: Click a group header to collapse/expand that section. Priority is shown as a colored dot on the left.'}
           </Typography>
         </Paper>
 
-        {/* Kanban Board */}
-        <Grid container spacing={3}>
-          {columns.map((column) => {
-            const tasksInColumn = filteredTasks.filter((task) => task.status === column.key);
-            
-            // Define column theme colors
-            const colColor = column.key === 'todo' ? theme.palette.info.main : 
-                             column.key === 'in_progress' ? theme.palette.warning.main : 
-                             theme.palette.success.main;
-            const colBg = isDark ? `rgba(${column.key === 'todo' ? '2,136,209' : column.key === 'in_progress' ? '237,108,2' : '46,125,50'}, 0.05)` 
-                                 : `rgba(${column.key === 'todo' ? '2,136,209' : column.key === 'in_progress' ? '237,108,2' : '46,125,50'}, 0.03)`;
-
-            return (
-              <Grid size={{ xs: 12, md: 4 }} key={column.key}>
-                <Paper
-                  elevation={0}
-                  onDragOver={(event) => {
-                    event.preventDefault();
-                    if (hoveredColumnKey !== column.key) setHoveredColumnKey(column.key);
-                  }}
-                  onDragLeave={() => {
-                    if (hoveredColumnKey === column.key) setHoveredColumnKey(null);
-                  }}
-                  onDrop={(event) => handleDropToColumn(event, column.key)}
-                  sx={{
-                    p: 2,
-                    borderRadius: '20px',
-                    minHeight: '70vh',
-                    border: '1px solid',
-                    borderColor: hoveredColumnKey === column.key ? colColor : 'divider',
-                    bgcolor: hoveredColumnKey === column.key ? `${colColor}22` : colBg,
-                    transition: 'all 0.3s ease',
-                    display: 'flex',
-                    flexDirection: 'column'
-                  }}
-                >
-                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3, pb: 1.5, borderBottom: '2px solid', borderColor: `${colColor}33` }}>
-                    <Typography component="div" sx={{ fontWeight: 800, color: 'text.primary', display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: colColor }} />
-                      {column.label}
-                    </Typography>
-                    <Chip size="small" label={tasksInColumn.length} sx={{ fontWeight: 'bold', bgcolor: `${colColor}22`, color: colColor, borderRadius: '8px' }} />
-                  </Box>
-
-                  {draggedTaskId && hoveredColumnKey === column.key && (
-                    <Box sx={{ mb: 2, p: 2, border: '2px dashed', borderColor: colColor, borderRadius: '12px', textAlign: 'center', bgcolor: `${colColor}11` }}>
-                      <Typography variant="caption" sx={{ color: colColor, fontWeight: 700 }}>Drop task here</Typography>
-                    </Box>
-                  )}
-
-                  <Stack spacing={2} sx={{ flexGrow: 1 }}>
-                    {tasksInColumn.map((task) => (
-                      <Card
-                        key={task.id}
-                        id={`task-card-${task.id}`}
-                        elevation={0}
-                        draggable={movingTaskId !== task.id}
-                        onDragStart={(event) => handleDragStart(event, task.id)}
-                        onDragEnd={handleDragEnd}
-                        onKeyDown={(event) => handleCardKeyDown(event, task)}
-                        tabIndex={0}
-                        sx={{
-                          borderRadius: '16px',
-                          border: '1px solid',
-                          borderColor: 'divider',
-                          bgcolor: 'background.paper',
-                          cursor: 'grab',
-                          opacity: movingTaskId === task.id ? 0.6 : 1,
-                          boxShadow: highlightedTaskId === task.id
-                            ? `0 0 0 2px ${theme.palette.primary.main}, 0 4px 20px ${theme.palette.primary.main}40`
-                            : isDark ? '0 4px 12px rgba(0,0,0,0.2)' : '0 4px 12px rgba(0,0,0,0.03)',
-                          transition: 'all 0.2s ease',
-                          '&:hover': {
-                            transform: 'translateY(-3px)',
-                            boxShadow: isDark ? '0 6px 16px rgba(0,0,0,0.4)' : '0 8px 24px rgba(0,0,0,0.08)',
-                            borderColor: colColor
-                          },
-                          '&:focus-visible': { outline: `2px solid ${theme.palette.primary.main}`, outlineOffset: '2px' },
-                          '&:active': { cursor: 'grabbing', transform: 'scale(0.98)' }
-                        }}
-                      >
-                        <CardContent sx={{ p: 2.5, '&:last-child': { pb: 2.5 } }}>
-                          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
-                             <Typography variant="subtitle1" sx={{ fontWeight: 800, lineHeight: 1.3, color: 'text.primary' }}>
-                               {task.title || task.task || 'Untitled Task'}
-                             </Typography>
-                             <Box sx={{ display: 'flex', gap: 0.5 }}>
-                                {task.status !== 'done' && (
-                                  <IconButton
-                                    onClick={() => updateTaskStatus(task, 'done')}
-                                    size="small"
-                                    disabled={movingTaskId === task.id}
-                                    sx={{ color: 'success.main', bgcolor: 'success.main' + '1A', '&:hover': { bgcolor: 'success.main' + '33' }, width: 28, height: 28 }}
-                                    title="Mark Complete"
-                                  >
-                                    <CheckCircleOutlineIcon sx={{ fontSize: 18 }} />
-                                  </IconButton>
-                                )}
-                             </Box>
-                          </Box>
-
-                          <Typography variant="body2" sx={{ color: 'text.secondary', mb: 2, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-                            {task.description || 'No description provided.'}
-                          </Typography>
-
-                          <Box sx={{ display: 'flex', gap: 1, mb: 2, flexWrap: 'wrap' }}>
-                            <Chip size="small" label={task.priority?.toUpperCase() || 'MEDIUM'} sx={{ fontSize: '0.65rem', fontWeight: 800, letterSpacing: 0.5, color: priorityColorMap[task.priority] ? `${priorityColorMap[task.priority]}.main` : 'text.primary', bgcolor: priorityColorMap[task.priority] ? `${priorityColorMap[task.priority]}.main` + '1A' : 'action.selected' }} />
-                            {task.dueDate && <Chip size="small" label={new Date(task.dueDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} sx={{ fontSize: '0.65rem', fontWeight: 600, bgcolor: 'action.hover' }} />}
-                            {task.approvalStatus === 'pending' && <Chip size="small" color="warning" label="Approval pending" sx={{ fontSize: '0.65rem', fontWeight: 600 }} />}
-                            {task.approvalStatus === 'rejected' && <Chip size="small" color="error" label="Rejected" sx={{ fontSize: '0.65rem', fontWeight: 600 }} />}
-                            {task.escalationLevel > 0 && <Chip size="small" color="error" variant="outlined" label={`SLA L${task.escalationLevel}`} sx={{ fontSize: '0.65rem', fontWeight: 600 }} />}
-                          </Box>
-
-                          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', pt: 1.5, borderTop: '1px solid', borderColor: 'divider' }}>
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                              {task.assigneeId ? (
-                                <>
-                                  <Avatar sx={{ width: 26, height: 26, fontSize: '0.75rem', bgcolor: 'primary.main', fontWeight: 'bold' }}>
-                                    {task.assigneeId.fullName ? task.assigneeId.fullName.charAt(0).toUpperCase() : 'A'}
-                                  </Avatar>
-                                  <Typography variant="caption" sx={{ fontWeight: 600, color: 'text.secondary' }}>
-                                    {task.assigneeId.fullName?.split(' ')[0] || 'Assignee'}
-                                  </Typography>
-                                </>
-                              ) : (
-                                <Typography variant="caption" sx={{ color: 'text.disabled', fontStyle: 'italic' }}>Unassigned</Typography>
-                              )}
-                            </Box>
-                            
-                            <Box sx={{ display: 'flex', gap: 0.5 }}>
-                              <IconButton onClick={() => handleEditClick(task)} size="small" disabled={movingTaskId === task.id} sx={{ color: 'text.secondary', '&:hover': { color: 'primary.main', bgcolor: 'primary.main' + '1A' } }}>
-                                <EditIcon sx={{ fontSize: 18 }} />
-                              </IconButton>
-                              {movingTaskId === task.id ? (
-                                <IconButton size="small" disabled><CustomLoader size={16} /></IconButton>
-                              ) : (
-                                <DeleteTask taskId={task.id} onDeleteSuccess={fetchTasks} />
-                              )}
-                            </Box>
-                          </Box>
-                        </CardContent>
-                      </Card>
-                    ))}
-                  </Stack>
-                </Paper>
-              </Grid>
-            );
-          })}
-        </Grid>
-        {filteredTasks.length === 0 && !loading && (
-          <Box sx={{ py: 10, textAlign: 'center', color: 'text.secondary' }}>
-            <Typography variant="body2">No tasks found in your workspace.</Typography>
-          </Box>
+        {/* ── View Renderer ──────────────────────────────────────── */}
+        {viewMode === 'kanban' && (
+          <>
+            <Grid container spacing={3}>
+              {columns.map((column) => {
+                const tasksInColumn = filteredTasks.filter((task) => task.status === column.key);
+                const colColor = column.key === 'todo' ? theme.palette.info.main :
+                                 column.key === 'in_progress' ? theme.palette.warning.main :
+                                 theme.palette.success.main;
+                const colBg = isDark
+                  ? `rgba(${column.key === 'todo' ? '2,136,209' : column.key === 'in_progress' ? '237,108,2' : '46,125,50'}, 0.05)`
+                  : `rgba(${column.key === 'todo' ? '2,136,209' : column.key === 'in_progress' ? '237,108,2' : '46,125,50'}, 0.03)`;
+                return (
+                  <Grid size={{ xs: 12, md: 4 }} key={column.key}>
+                    <Paper
+                      elevation={0}
+                      onDragOver={(event) => { event.preventDefault(); if (hoveredColumnKey !== column.key) setHoveredColumnKey(column.key); }}
+                      onDragLeave={() => { if (hoveredColumnKey === column.key) setHoveredColumnKey(null); }}
+                      onDrop={(event) => handleDropToColumn(event, column.key)}
+                      sx={{
+                        p: 2, borderRadius: '20px', minHeight: '70vh', border: '1px solid',
+                        borderColor: hoveredColumnKey === column.key ? colColor : 'divider',
+                        bgcolor: hoveredColumnKey === column.key ? `${colColor}22` : colBg,
+                        transition: 'all 0.3s ease', display: 'flex', flexDirection: 'column'
+                      }}
+                    >
+                      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3, pb: 1.5, borderBottom: '2px solid', borderColor: `${colColor}33` }}>
+                        <Typography component="div" sx={{ fontWeight: 800, color: 'text.primary', display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: colColor }} />
+                          {column.label}
+                        </Typography>
+                        <Chip size="small" label={tasksInColumn.length} sx={{ fontWeight: 'bold', bgcolor: `${colColor}22`, color: colColor, borderRadius: '8px' }} />
+                      </Box>
+                      {draggedTaskId && hoveredColumnKey === column.key && (
+                        <Box sx={{ mb: 2, p: 2, border: '2px dashed', borderColor: colColor, borderRadius: '12px', textAlign: 'center', bgcolor: `${colColor}11` }}>
+                          <Typography variant="caption" sx={{ color: colColor, fontWeight: 700 }}>Drop task here</Typography>
+                        </Box>
+                      )}
+                      <Stack spacing={2} sx={{ flexGrow: 1 }}>
+                        {tasksInColumn.map((task) => (
+                          <TaskCard
+                            key={task.id}
+                            task={task}
+                            colColor={colColor}
+                            highlightedTaskId={highlightedTaskId}
+                            movingTaskId={movingTaskId}
+                            onDragStart={handleDragStart}
+                            onDragEnd={handleDragEnd}
+                            onKeyDown={handleCardKeyDown}
+                            onEditClick={handleEditClick}
+                            onMarkDone={handleMarkDone}
+                            onDeleteSuccess={fetchTasks}
+                            isDark={isDark}
+                          />
+                        ))}
+                      </Stack>
+                    </Paper>
+                  </Grid>
+                );
+              })}
+            </Grid>
+            {filteredTasks.length === 0 && !loading && (
+              <Box sx={{ py: 10, textAlign: 'center', color: 'text.secondary' }}>
+                <Typography variant="body2">No tasks found in your workspace.</Typography>
+              </Box>
+            )}
+          </>
         )}
+
+        {viewMode === 'table' && (
+          <TaskTableView
+            tasks={filteredTasks}
+            movingTaskId={movingTaskId}
+            highlightedTaskId={highlightedTaskId}
+            onEditClick={handleEditClick}
+            onMarkDone={handleMarkDone}
+            onDeleteSuccess={fetchTasks}
+          />
+        )}
+
+        {viewMode === 'list' && (
+          <TaskListView
+            tasks={filteredTasks}
+            movingTaskId={movingTaskId}
+            highlightedTaskId={highlightedTaskId}
+            onEditClick={handleEditClick}
+            onMarkDone={handleMarkDone}
+            onDeleteSuccess={fetchTasks}
+          />
+        )}
+
 
         <CreateTask
           open={openModal}

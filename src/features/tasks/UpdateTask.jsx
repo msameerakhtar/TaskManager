@@ -1,11 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { 
     Modal, Box, Typography, TextField, Button, 
     Stack, MenuItem, Snackbar, Alert, Backdrop, Fade, useTheme, Divider, List, ListItem, ListItemText
 } from '@mui/material';
 import CustomLoader from '../../components/CustomLoader';
-import axios from 'axios';
-import API_BASE_URL from '../../config/api';
+import { taskApi } from '../../api/taskApi';
+import { API_BASE_URL } from '../../api/axiosInstance';
 import { useSelector } from 'react-redux';
 
 const UpdateTask = ({ open, handleClose, taskData, onUpdateSuccess, projectMembers = [] }) => {
@@ -53,7 +53,7 @@ const UpdateTask = ({ open, handleClose, taskData, onUpdateSuccess, projectMembe
         }
     }, [taskData, open]);
 
-    const modalStyle = {
+    const modalStyle = useMemo(() => ({
         position: 'absolute',
         top: '50%',
         left: '50%',
@@ -71,9 +71,9 @@ const UpdateTask = ({ open, handleClose, taskData, onUpdateSuccess, projectMembe
         '&::-webkit-scrollbar': { display: 'none' },
         msOverflowStyle: 'none',
         scrollbarWidth: 'none',
-    };
+    }), [isDark]);
 
-    const textFieldStyle = {
+    const textFieldStyle = useMemo(() => ({
         '& .MuiOutlinedInput-root': {
             color: 'text.primary',
             bgcolor: isDark ? 'rgba(255, 255, 255, 0.03)' : 'rgba(0, 0, 0, 0.02)',
@@ -84,13 +84,13 @@ const UpdateTask = ({ open, handleClose, taskData, onUpdateSuccess, projectMembe
         },
         '& .MuiInputLabel-root': { color: 'text.secondary' },
         '& .MuiInputLabel-root.Mui-focused': { color: 'primary.main' },
-    };
+    }), [isDark]);
 
-    const handleChange = (e) => {
-        setFormData({ ...formData, [e.target.name]: e.target.value });
-    };
+    const handleChange = useCallback((e) => {
+        setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
+    }, []);
 
-    const isChanged = 
+    const isChanged = useMemo(() =>
         formData.title !== (taskData.title || taskData.task || '') ||
         formData.description !== (taskData.description || '') ||
         formData.status !== (taskData.status || 'todo') ||
@@ -98,7 +98,8 @@ const UpdateTask = ({ open, handleClose, taskData, onUpdateSuccess, projectMembe
         formData.dueDate !== (taskData.dueDate ? new Date(taskData.dueDate).toISOString().split('T')[0] : '') ||
         formData.recurrenceEnabled !== Boolean(taskData.recurrence?.enabled) ||
         formData.recurrenceFrequency !== (taskData.recurrence?.frequency || 'daily') ||
-        formData.assigneeId !== (taskData.assigneeId?._id || taskData.assigneeId || '');
+        formData.assigneeId !== (taskData.assigneeId?._id || taskData.assigneeId || '')
+    , [formData, taskData]);
 
     const handleUpdate = async (e) => {
         e.preventDefault();
@@ -116,7 +117,7 @@ const UpdateTask = ({ open, handleClose, taskData, onUpdateSuccess, projectMembe
         setLoading(true);
         try {
             const projectId = taskData.projectId?._id || taskData.projectId;
-            const { data } = await axios.put(`${API_BASE_URL}/tasks/${taskId}`, {
+            const { data } = await taskApi.updateTask(taskId, {
                 title: formData.title,
                 description: formData.description,
                 status: formData.status,
@@ -128,8 +129,6 @@ const UpdateTask = ({ open, handleClose, taskData, onUpdateSuccess, projectMembe
                 recurrence: formData.recurrenceEnabled
                     ? { enabled: true, frequency: formData.recurrenceFrequency }
                     : { enabled: false }
-            }, {
-                headers: { 'x-auth-token': token }
             });
 
             if (data?.requiresApproval) {
@@ -167,11 +166,7 @@ const UpdateTask = ({ open, handleClose, taskData, onUpdateSuccess, projectMembe
         if (!newComment.trim() || !taskData?.id) return;
         setUploadLoading(true);
         try {
-            const response = await axios.post(`${API_BASE_URL}/tasks/${taskData.id}/comments`, {
-                text: newComment.trim()
-            }, {
-                headers: { 'x-auth-token': token }
-            });
+            const response = await taskApi.addComment(taskData.id, newComment.trim());
             setNewComment('');
             setCommentsList(response.data.comments || []);
             setActivityList(response.data.activityLog || []);
@@ -188,11 +183,7 @@ const UpdateTask = ({ open, handleClose, taskData, onUpdateSuccess, projectMembe
         if (!newNote.trim() || !taskData?.id) return;
         setUploadLoading(true);
         try {
-            const response = await axios.post(`${API_BASE_URL}/tasks/${taskData.id}/notes`, {
-                content: newNote.trim()
-            }, {
-                headers: { 'x-auth-token': token }
-            });
+            const response = await taskApi.addNote(taskData.id, newNote.trim());
             setNewNote('');
             setNotesList(response.data.notes || []);
             onUpdateSuccess();
@@ -210,12 +201,7 @@ const UpdateTask = ({ open, handleClose, taskData, onUpdateSuccess, projectMembe
         try {
             const body = new FormData();
             body.append('attachment', selectedFile);
-            const response = await axios.post(`${API_BASE_URL}/tasks/${taskData.id}/attachments`, body, {
-                headers: {
-                    'x-auth-token': token,
-                    'Content-Type': 'multipart/form-data'
-                }
-            });
+            const response = await taskApi.addAttachment(taskData.id, body);
             setSelectedFile(null);
             setAttachmentsList(response.data.attachments || []);
             onUpdateSuccess();

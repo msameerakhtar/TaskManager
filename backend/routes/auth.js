@@ -3,6 +3,7 @@ const router = express.Router();
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 const authMiddleware = require('../middleware/authMiddleware');
+const verifyRecaptcha = require('../middleware/recaptcha');
 const Project = require('../models/Project');
 const multer = require('multer');
 const path = require('path');
@@ -22,7 +23,7 @@ const upload = multer({
 
 // @route   POST api/auth/signup
 // @desc    Register user
-router.post('/signup', async (req, res) => {
+router.post('/signup', verifyRecaptcha, async (req, res) => {
     const { fullName, email, password, avatarUrl } = req.body;
 
     try {
@@ -64,7 +65,7 @@ router.post('/signup', async (req, res) => {
 
 // @route   POST api/auth/login
 // @desc    Authenticate user & get token
-router.post('/login', async (req, res) => {
+router.post('/login', verifyRecaptcha, async (req, res) => {
     const { email, password } = req.body;
 
     try {

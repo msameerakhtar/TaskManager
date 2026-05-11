@@ -1,18 +1,17 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import {
     Modal, Box, Typography, TextField, Button,
     Stack, Backdrop, Fade, MenuItem,
     Snackbar, Alert, useTheme
 } from '@mui/material';
 import CustomLoader from '../../components/CustomLoader';
-import axios from 'axios';
-import API_BASE_URL from '../../config/api';
+import { taskApi } from '../../api/taskApi';
 import { useSelector } from 'react-redux';
 
 const CreateTask = ({ open, handleClose, refreshTasks, selectedProjectId, projectMembers = [] }) => {
     const theme = useTheme();
     const isDark = theme.palette.mode === 'dark';
-    const token = useSelector((state) => state.auth.token);
+    const token = useSelector((state) => state.auth.token); // kept for auth-guard check only
 
     const [formData, setFormData] = useState({
         title: '',
@@ -30,7 +29,7 @@ const CreateTask = ({ open, handleClose, refreshTasks, selectedProjectId, projec
     const [feedback, setFeedback] = useState({ open: false, message: '', severity: 'success' });
     const [suggestionLoading, setSuggestionLoading] = useState(false);
 
-    const modalStyle = {
+    const modalStyle = useMemo(() => ({
         position: 'absolute',
         top: '50%',
         left: '50%',
@@ -47,9 +46,9 @@ const CreateTask = ({ open, handleClose, refreshTasks, selectedProjectId, projec
         boxShadow: isDark ? '0 25px 50px -12px rgba(0, 0, 0, 0.5)' : '0 25px 50px -12px rgba(0, 0, 0, 0.1)',
         p: 4,
         backdropFilter: 'blur(10px)',
-    };
+    }), [isDark]);
 
-    const textFieldStyle = {
+    const textFieldStyle = useMemo(() => ({
         '& .MuiOutlinedInput-root': {
             color: 'text.primary',
             bgcolor: isDark ? 'rgba(255, 255, 255, 0.03)' : 'rgba(0, 0, 0, 0.02)',
@@ -60,16 +59,16 @@ const CreateTask = ({ open, handleClose, refreshTasks, selectedProjectId, projec
         },
         '& .MuiInputLabel-root': { color: 'text.secondary' },
         '& .MuiInputLabel-root.Mui-focused': { color: 'primary.main' },
-    };
+    }), [isDark]);
 
-    const handleChange = (e) => {
+    const handleChange = useCallback((e) => {
         const { name, value } = e.target;
         setFormData(prev => ({ ...prev, [name]: value }));
-    };
+    }, []);
 
-    const handleSnackbarClose = () => {
+    const handleSnackbarClose = useCallback(() => {
         setFeedback(prev => ({ ...prev, open: false }));
-    };
+    }, []);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -105,9 +104,7 @@ const CreateTask = ({ open, handleClose, refreshTasks, selectedProjectId, projec
                     : []
             };
 
-            await axios.post(`${API_BASE_URL}/tasks`, payload, {
-                headers: { 'x-auth-token': token }
-            });
+            await taskApi.createTask(payload);
 
             setFormData({
                 title: '',
@@ -137,13 +134,11 @@ const CreateTask = ({ open, handleClose, refreshTasks, selectedProjectId, projec
         if (!selectedProjectId || !formData.dueDate) return;
         setSuggestionLoading(true);
         try {
-            const response = await axios.post(`${API_BASE_URL}/tasks/suggest/deadline`, {
+            const response = await taskApi.suggestDeadline({
                 projectId: selectedProjectId,
                 assigneeId: formData.assigneeId || null,
                 dueDate: formData.dueDate,
                 estimatedHours: Number(formData.estimatedHours) || 2
-            }, {
-                headers: { 'x-auth-token': token }
             });
             const data = response.data;
             if (!data.feasible && data.suggestedDueDate) {
@@ -164,13 +159,11 @@ const CreateTask = ({ open, handleClose, refreshTasks, selectedProjectId, projec
         if (!selectedProjectId || !formData.dueDate) return;
         setSuggestionLoading(true);
         try {
-            const response = await axios.post(`${API_BASE_URL}/tasks/suggest/priority`, {
+            const response = await taskApi.suggestPriority({
                 projectId: selectedProjectId,
                 assigneeId: formData.assigneeId || null,
                 dueDate: formData.dueDate,
                 estimatedHours: Number(formData.estimatedHours) || 2
-            }, {
-                headers: { 'x-auth-token': token }
             });
             const nextPriority = response.data?.priority;
             if (nextPriority) {

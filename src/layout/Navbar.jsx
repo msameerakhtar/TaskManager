@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { 
     AppBar, Toolbar, Typography, Avatar, Menu, MenuItem, IconButton, 
     Box, Container, Button, ListItemIcon, Drawer, List, ListItem, ListItemText,
@@ -21,8 +21,7 @@ import {
 import { useNavigate, useLocation, createSearchParams } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import { logout } from '../features/auth/authSlice';
-import axios from 'axios';
-import API_BASE_URL from '../config/api';
+import { notificationApi } from '../api/notificationApi';
 import ProfileUpdateModal from '../features/auth/ProfileUpdateModal';
 
 const Navbar = ({ mode, toggleTheme }) => {
@@ -46,32 +45,32 @@ const Navbar = ({ mode, toggleTheme }) => {
 
     const isHomePage = location.pathname === '/';
     
-    const fullName = user?.fullName || user?.email?.split('@')[0] || "User";
-    const avatarUrl = user?.avatarUrl;
+    const fullName = useMemo(() => user?.fullName || user?.email?.split('@')[0] || "User", [user]);
+    const avatarUrl = useMemo(() => user?.avatarUrl, [user]);
 
-    const navItems = [
+    const navItems = useMemo(() => [
         { label: 'Home', path: '/tasks' },
         { label: 'Enterprise', path: '/enterprise' },
         { label: 'Profile', path: '/profile' },
         { label: 'Contact Us', path: '/contact' },
         { label: 'Blog', path: '/blog' },
-    ];
+    ], []);
 
-    const handleLogoutClick = () => {
+    const handleLogoutClick = useCallback(() => {
         setAnchorEl(null);
         setIsLogoutDialogOpen(true);
-    };
+    }, []);
 
-    const handleConfirmLogout = () => {
+    const handleConfirmLogout = useCallback(() => {
         dispatch(logout());
         navigate('/login');
-    };
+    }, [dispatch, navigate]);
 
-    const handleDrawerToggle = () => {
-        setMobileOpen(!mobileOpen);
-    };
+    const handleDrawerToggle = useCallback(() => {
+        setMobileOpen(prev => !prev);
+    }, []);
 
-    const formatTimeAgo = (dateInput) => {
+    const formatTimeAgo = useCallback((dateInput) => {
         if (!dateInput) return '';
         const now = Date.now();
         const then = new Date(dateInput).getTime();
@@ -83,9 +82,9 @@ const Navbar = ({ mode, toggleTheme }) => {
         if (diffHr < 24) return `${diffHr}h ago`;
         const diffDay = Math.floor(diffHr / 24);
         return `${diffDay}d ago`;
-    };
+    }, []);
 
-    const getNotificationIcon = (type) => {
+    const getNotificationIcon = useCallback((type) => {
         if (type === 'due_soon') return <DueSoonIcon fontSize="small" sx={{ color: 'warning.main', mt: 0.2 }} />;
         if (type === 'approval_request') {
             return <ApprovalIcon fontSize="small" sx={{ color: 'info.main', mt: 0.2 }} />;
@@ -97,7 +96,7 @@ const Navbar = ({ mode, toggleTheme }) => {
             return <SlaBreachIcon fontSize="small" sx={{ color: 'error.dark', mt: 0.2 }} />;
         }
         return <DefaultNotificationIcon fontSize="small" sx={{ color: 'text.secondary', mt: 0.2 }} />;
-    };
+    }, []);
 
     const getNotificationGroupLabel = (dateInput) => {
         const now = new Date();
@@ -115,9 +114,7 @@ const Navbar = ({ mode, toggleTheme }) => {
         if (!token) return;
         setLoadingNotifications(true);
         try {
-            const response = await axios.get(`${API_BASE_URL}/notifications?page=${page}&limit=8`, {
-                headers: { 'x-auth-token': token }
-            });
+            const response = await notificationApi.getNotifications({ page, limit: 8 });
             const data = response.data || {};
             const nextNotifications = data.notifications || [];
             setNotifications((prev) => (append ? [...prev, ...nextNotifications] : nextNotifications));
@@ -137,18 +134,16 @@ const Navbar = ({ mode, toggleTheme }) => {
         }
     }, [token, user, fetchNotifications]);
 
-    const handleOpenNotifications = async (event) => {
+    const handleOpenNotifications = useCallback(async (event) => {
         setNotificationAnchorEl(event.currentTarget);
         setNotificationFilter('all');
         await fetchNotifications(1, false);
-    };
+    }, [fetchNotifications]);
 
-    const handleNotificationClick = async (notification) => {
+    const handleNotificationClick = useCallback(async (notification) => {
         try {
             if (!notification.isRead) {
-                await axios.patch(`${API_BASE_URL}/notifications/${notification._id}/read`, {}, {
-                    headers: { 'x-auth-token': token }
-                });
+                await notificationApi.markAsRead(notification._id);
             }
         } catch (error) {
             console.error('Failed to mark notification as read:', error);
@@ -169,26 +164,24 @@ const Navbar = ({ mode, toggleTheme }) => {
                 navigate('/tasks');
             }
         }
-    };
+    }, [token, navigate]);
 
-    const handleMarkAllRead = async () => {
+    const handleMarkAllRead = useCallback(async () => {
         try {
-            await axios.patch(`${API_BASE_URL}/notifications/read-all`, {}, {
-                headers: { 'x-auth-token': token }
-            });
+            await notificationApi.markAllAsRead();
             setNotifications((prev) => prev.map((item) => ({ ...item, isRead: true })));
             setUnreadCount(0);
         } catch (error) {
             console.error('Failed to mark all notifications as read:', error);
         }
-    };
+    }, [token]);
 
-    const handleLoadMoreNotifications = async () => {
+    const handleLoadMoreNotifications = useCallback(async () => {
         if (!hasMoreNotifications || loadingNotifications) return;
         await fetchNotifications(notificationPage + 1, true);
-    };
+    }, [hasMoreNotifications, loadingNotifications, fetchNotifications, notificationPage]);
 
-    const visibleNotifications = notifications.filter((notification) => {
+    const visibleNotifications = useMemo(() => notifications.filter((notification) => {
         if (notificationFilter === 'unread') return !notification.isRead;
         if (notificationFilter === 'due_soon') return notification.type === 'due_soon';
         if (notificationFilter === 'approvals') return notification.type === 'approval_request';
@@ -196,7 +189,7 @@ const Navbar = ({ mode, toggleTheme }) => {
             return notification.type === 'sla_escalation' || notification.type === 'sla_breach';
         }
         return true;
-    });
+    }), [notifications, notificationFilter]);
 
     return (
         <AppBar 

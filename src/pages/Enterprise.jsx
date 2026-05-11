@@ -1,13 +1,13 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Box, Button, Container, Divider, FormControlLabel, Grid, Paper, Stack, Switch,
   Tab, Tabs, TextField, Typography, Table, TableBody, TableCell, TableHead, TableRow,
   MenuItem, Alert, Chip, IconButton
 } from '@mui/material';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
-import axios from 'axios';
 import { useSelector } from 'react-redux';
-import API_BASE_URL from '../config/api';
+import { projectApi } from '../api/projectApi';
+import { enterpriseApi } from '../api/enterpriseApi';
 
 const tabProps = (index) => ({
   id: `enterprise-tab-${index}`,
@@ -16,7 +16,6 @@ const tabProps = (index) => ({
 
 const Enterprise = () => {
   const token = useSelector((state) => state.auth.token);
-  const authHeaders = { headers: { 'x-auth-token': token } };
 
   const [projects, setProjects] = useState([]);
   const [projectId, setProjectId] = useState('');
@@ -38,13 +37,13 @@ const Enterprise = () => {
 
   const fetchProjects = useCallback(async () => {
     try {
-      const { data } = await axios.get(`${API_BASE_URL}/projects`, authHeaders);
+      const { data } = await projectApi.getProjects();
       setProjects(data);
       if (!projectId && data[0]?._id) setProjectId(data[0]._id);
     } catch (e) {
       console.error(e);
     }
-  }, [token, projectId]);
+  }, [projectId]);
 
   useEffect(() => {
     fetchProjects();
@@ -57,7 +56,10 @@ const Enterprise = () => {
     return m?.role || null;
   }, [userId]);
 
-  const admin = projectId ? roleForProject(projects.find((p) => p._id === projectId)) === 'admin' : false;
+  const admin = useMemo(
+    () => projectId ? roleForProject(projects.find((p) => p._id === projectId)) === 'admin' : false,
+    [projectId, projects, roleForProject]
+  );
 
   useEffect(() => {
     const p = projects.find((x) => x._id === projectId);
@@ -84,10 +86,9 @@ const Enterprise = () => {
     });
   }, [projectId, projects]);
 
-  const showMsg = (text, severity = 'success') => setMessage({ text, severity });
+  const showMsg = useCallback((text, severity = 'success') => setMessage({ text, severity }), []);
 
-  /** Same-tab + other tabs: TaskList listens and refetches when approvals change. */
-  const broadcastTasksRefresh = (pid) => {
+  const broadcastTasksRefresh = useCallback((pid) => {
     const id = pid || projectId;
     const detail = { projectId: id, source: 'enterprise' };
     try {
@@ -98,13 +99,13 @@ const Enterprise = () => {
       /* ignore */
     }
     window.dispatchEvent(new CustomEvent('tm-tasks-sync', { detail }));
-  };
+  }, [projectId]);
 
-  const saveEnterprise = async () => {
+  const saveEnterprise = useCallback(async () => {
     if (!projectId || !admin) return;
     setLoading(true);
     try {
-      await axios.patch(`${API_BASE_URL}/projects/${projectId}/enterprise`, { enterprise }, authHeaders);
+      await projectApi.updateEnterprise(projectId, enterprise);
       showMsg('Enterprise settings saved.');
       fetchProjects();
     } catch (e) {
@@ -112,101 +113,94 @@ const Enterprise = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [projectId, admin, enterprise, showMsg, fetchProjects]);
 
-  const loadAudit = async () => {
+  const loadAudit = useCallback(async () => {
     if (!projectId || !admin) return;
     try {
-      const { data } = await axios.get(`${API_BASE_URL}/enterprise/audit?projectId=${projectId}&limit=100`, authHeaders);
+      const { data } = await enterpriseApi.getAuditLog(projectId);
       setAuditRows(data.items || []);
     } catch (e) {
       showMsg(e.response?.data?.message || 'Could not load audit log', 'error');
     }
-  };
+  }, [projectId, admin, showMsg]);
 
-  const loadApprovals = async () => {
+  const loadApprovals = useCallback(async () => {
     if (!projectId || !admin) return;
     try {
-      const { data } = await axios.get(`${API_BASE_URL}/enterprise/approvals/pending?projectId=${projectId}`, authHeaders);
+      const { data } = await enterpriseApi.getPendingApprovals(projectId);
       setApprovals(Array.isArray(data) ? data : []);
     } catch (e) {
       showMsg(e.response?.data?.message || 'Could not load approvals', 'error');
     }
-  };
+  }, [projectId, admin, showMsg]);
 
-  const loadApiKeys = async () => {
+  const loadApiKeys = useCallback(async () => {
     if (!projectId || !admin) return;
     try {
-      const { data } = await axios.get(`${API_BASE_URL}/projects/${projectId}/api-keys`, authHeaders);
+      const { data } = await projectApi.getApiKeys(projectId);
       setApiKeys(Array.isArray(data) ? data : []);
     } catch (e) {
       showMsg(e.response?.data?.message || 'Could not load API keys', 'error');
     }
-  };
+  }, [projectId, admin, showMsg]);
 
   useEffect(() => {
     if (tab === 1) loadAudit();
     if (tab === 2) loadApprovals();
     if (tab === 4) loadApiKeys();
-  }, [tab, projectId, admin]);
+  }, [tab, projectId, admin, loadAudit, loadApprovals, loadApiKeys]);
 
-  const approveRequest = async (id) => {
+  const approveRequest = useCallback(async (id) => {
     try {
-      await axios.post(`${API_BASE_URL}/enterprise/approvals/${id}/approve`, {}, authHeaders);
+      await enterpriseApi.approveRequest(id);
       showMsg('Approved.');
       broadcastTasksRefresh();
       loadApprovals();
     } catch (e) {
       showMsg(e.response?.data?.message || 'Approve failed', 'error');
     }
-  };
+  }, [showMsg, broadcastTasksRefresh, loadApprovals]);
 
-  const rejectRequest = async (id) => {
+  const rejectRequest = useCallback(async (id) => {
     const comment = window.prompt('Optional comment for rejection', '') ?? '';
     try {
-      await axios.post(`${API_BASE_URL}/enterprise/approvals/${id}/reject`, { comment }, authHeaders);
+      await enterpriseApi.rejectRequest(id, comment);
       showMsg('Rejected.');
       broadcastTasksRefresh();
       loadApprovals();
     } catch (e) {
       showMsg(e.response?.data?.message || 'Reject failed', 'error');
     }
-  };
+  }, [showMsg, broadcastTasksRefresh, loadApprovals]);
 
-  const createApiKey = async () => {
+  const createApiKey = useCallback(async () => {
     if (!projectId) return;
     try {
-      const { data } = await axios.post(
-        `${API_BASE_URL}/projects/${projectId}/api-keys`,
-        { label: newKeyLabel },
-        authHeaders
-      );
+      const { data } = await projectApi.createApiKey(projectId, newKeyLabel);
       setRevealedKey(data.key || '');
       showMsg(data.message || 'Key created.');
       loadApiKeys();
     } catch (e) {
       showMsg(e.response?.data?.message || 'Key creation failed', 'error');
     }
-  };
+  }, [projectId, newKeyLabel, showMsg, loadApiKeys]);
 
-  const revokeKey = async (kid) => {
+  const revokeKey = useCallback(async (kid) => {
     if (!window.confirm('Revoke this API key?')) return;
     try {
-      await axios.delete(`${API_BASE_URL}/projects/${projectId}/api-keys/${kid}`, authHeaders);
+      await projectApi.revokeApiKey(projectId, kid);
       showMsg('Key revoked.');
       loadApiKeys();
     } catch (e) {
       showMsg(e.response?.data?.message || 'Revoke failed', 'error');
     }
-  };
+  }, [projectId, showMsg, loadApiKeys]);
 
-  const downloadExport = async (path, filename) => {
+  const downloadExport = useCallback(async (path, filename) => {
     if (!projectId) return;
     try {
-      const res = await axios.get(
-        `${API_BASE_URL}/enterprise/exports/${path}?projectId=${projectId}`,
-        { headers: { 'x-auth-token': token }, responseType: 'blob' }
-      );
+      const res = await enterpriseApi.downloadExport(path, projectId);
       const url = URL.createObjectURL(res.data);
       const a = document.createElement('a');
       a.href = url;
@@ -230,25 +224,25 @@ const Enterprise = () => {
         }
       } else showMsg('Export failed', 'error');
     }
-  };
+  }, [projectId, showMsg]);
 
-  const testSlack = async () => {
+  const testSlack = useCallback(async () => {
     try {
-      await axios.post(`${API_BASE_URL}/projects/${projectId}/integrations/test-slack`, {}, authHeaders);
+      await projectApi.testSlack(projectId);
       showMsg('Slack test sent.');
     } catch (e) {
       showMsg(e.response?.data?.message || 'Slack test failed', 'error');
     }
-  };
+  }, [projectId, showMsg]);
 
-  const testEmail = async () => {
+  const testEmail = useCallback(async () => {
     try {
-      const { data } = await axios.post(`${API_BASE_URL}/projects/${projectId}/integrations/test-email`, {}, authHeaders);
+      const { data } = await projectApi.testEmail(projectId);
       showMsg(data.mocked ? 'Email logged (configure SMTP in server .env).' : 'Test email sent.');
     } catch (e) {
       showMsg(e.response?.data?.message || 'Email test failed', 'error');
     }
-  };
+  }, [projectId, showMsg]);
 
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>

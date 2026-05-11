@@ -18,9 +18,11 @@ dotenv.config();
 const app = express();
 app.set('trust proxy', 1);
 const httpServer = http.createServer(app);
+const CORS_ORIGIN = process.env.CORS_ORIGIN || 'http://localhost:5173';
+
 const io = new Server(httpServer, {
     cors: {
-        origin: '*',
+        origin: CORS_ORIGIN,
         methods: ['GET', 'POST']
     },
     transports: ['polling', 'websocket']
@@ -44,7 +46,7 @@ if (!fs.existsSync(uploadsDir)) {
 // Middleware
 app.use(helmet());
 app.use(compression());
-app.use(cors());
+app.use(cors({ origin: CORS_ORIGIN }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 

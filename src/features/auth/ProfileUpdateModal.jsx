@@ -12,8 +12,7 @@ import {
     Save as SaveIcon,
     Lock as LockIcon
 } from '@mui/icons-material';
-import axios from 'axios';
-import API_BASE_URL from '../../config/api';
+import { authApi } from '../../api/authApi';
 import { useDispatch, useSelector } from 'react-redux';
 import { updateUser } from './authSlice';
 import CustomLoader from '../../components/CustomLoader';
@@ -23,7 +22,6 @@ const ProfileUpdateModal = ({ open, handleClose }) => {
     const isDark = theme.palette.mode === 'dark';
     const dispatch = useDispatch();
     const user = useSelector((state) => state.auth.user);
-    const token = useSelector((state) => state.auth.token);
 
     const [fullName, setFullName] = useState(user?.fullName || '');
     const [avatarUrl, setAvatarUrl] = useState(user?.avatarUrl || '');
@@ -62,12 +60,7 @@ const ProfileUpdateModal = ({ open, handleClose }) => {
         formData.append('avatar', file);
 
         try {
-            const response = await axios.post(`${API_BASE_URL}/auth/upload-avatar`, formData, {
-                headers: { 
-                    'x-auth-token': token,
-                    'Content-Type': 'multipart/form-data'
-                }
-            });
+            const response = await authApi.uploadAvatar(formData);
             setAvatarUrl(response.data.avatarUrl);
             setFeedback({ open: true, message: 'Image uploaded! Don\'t forget to save changes.', severity: 'info' });
         } catch (error) {
@@ -81,10 +74,7 @@ const ProfileUpdateModal = ({ open, handleClose }) => {
         e.preventDefault();
         setLoading(true);
         try {
-            const response = await axios.put(`${API_BASE_URL}/auth/profile`, 
-                { fullName, avatarUrl },
-                { headers: { 'x-auth-token': token } }
-            );
+            const response = await authApi.updateProfile({ fullName, avatarUrl });
             dispatch(updateUser(response.data));
             setFeedback({ open: true, message: 'Profile updated successfully!', severity: 'success' });
         } catch (error) {
@@ -99,10 +89,7 @@ const ProfileUpdateModal = ({ open, handleClose }) => {
         if (!oldPassword || !newPassword) return;
         setPwdLoading(true);
         try {
-            await axios.put(`${API_BASE_URL}/auth/change-password`, 
-                { oldPassword, newPassword },
-                { headers: { 'x-auth-token': token } }
-            );
+            await authApi.changePassword({ oldPassword, newPassword });
             setFeedback({ open: true, message: 'Password changed successfully!', severity: 'success' });
             setOldPassword('');
             setNewPassword('');

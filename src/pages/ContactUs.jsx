@@ -5,8 +5,7 @@ import {
     Stack, IconButton, useTheme
 } from '@mui/material';
 import { Person, Email, Send, Phone, LocationOn } from '@mui/icons-material';
-import axios from 'axios';
-import API_BASE_URL from '../config/api';
+import { contactApi } from '../api/contactApi';
 
 const CONTACT_INFO = {
     phone: '+1 (555) 000-1234',
@@ -96,7 +95,7 @@ const ContactUs = () => {
                 email: formData.email.trim().toLowerCase(),
                 message: formData.message.trim(),
             };
-            await axios.post(`${API_BASE_URL}/contacts`, payload);
+            await contactApi.submitContact(payload);
             
             setStatus({ open: true, message: 'Message sent successfully!', severity: 'success' });
             setFormData(INITIAL_FORM);
