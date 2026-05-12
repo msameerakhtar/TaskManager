@@ -12,13 +12,13 @@ import { useMutation } from '@tanstack/react-query';
 import { authApi } from '../../api/authApi';
 import { useDispatch } from 'react-redux';
 import { login } from '../auth/authSlice';
-import { useGoogleReCaptcha } from 'react-google-recaptcha-v3';
+// import { useGoogleReCaptcha } from 'react-google-recaptcha-v3';
 
 const Login = ({ mode, setMode }) => {
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
   
-  const { executeRecaptcha } = useGoogleReCaptcha();
+  // const { executeRecaptcha } = useGoogleReCaptcha();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -49,17 +49,17 @@ const Login = ({ mode, setMode }) => {
     setError('');
 
     // Get reCAPTCHA v3 token silently
-    let recaptchaToken = '';
-    if (executeRecaptcha) {
-      recaptchaToken = await executeRecaptcha('login');
-    }
+    // let recaptchaToken = '';
+    // if (executeRecaptcha) {
+    //   recaptchaToken = await executeRecaptcha('login');
+    // }
 
     loginMutation.mutate({
       email: email.trim(),
       password,
-      recaptchaToken,
+      // recaptchaToken,
     });
-  }, [email, password, executeRecaptcha, loginMutation]);
+  }, [email, password, /* executeRecaptcha, */ loginMutation]);
 
   return (
     <Box sx={{ 

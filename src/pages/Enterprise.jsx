@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Box, Button, Container, Divider, FormControlLabel, Grid, Paper, Stack, Switch,
   Tab, Tabs, TextField, Typography, Table, TableBody, TableCell, TableHead, TableRow,
-  MenuItem, Alert, Chip, IconButton
+  MenuItem, Alert, Chip, IconButton, Dialog, DialogTitle, DialogContent, DialogActions
 } from '@mui/material';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import { useSelector } from 'react-redux';
@@ -34,6 +34,11 @@ const Enterprise = () => {
   const [apiKeys, setApiKeys] = useState([]);
   const [newKeyLabel, setNewKeyLabel] = useState('Automation export');
   const [revealedKey, setRevealedKey] = useState('');
+
+  // Comment Dialog State
+  const [commentDialogOpen, setCommentDialogOpen] = useState(false);
+  const [commentText, setCommentText] = useState('');
+  const [activeApproval, setActiveApproval] = useState({ id: null, type: null, title: '' });
 
   const fetchProjects = useCallback(async () => {
     try {
@@ -151,28 +156,39 @@ const Enterprise = () => {
     if (tab === 4) loadApiKeys();
   }, [tab, projectId, admin, loadAudit, loadApprovals, loadApiKeys]);
 
-  const approveRequest = useCallback(async (id) => {
+  const handleConfirmApprovalAction = useCallback(async () => {
+    if (!activeApproval.id) return;
+    setLoading(true);
     try {
-      await enterpriseApi.approveRequest(id);
-      showMsg('Approved.');
+      if (activeApproval.type === 'approve') {
+        await enterpriseApi.approveRequest(activeApproval.id, commentText);
+        showMsg('Approved successfully.');
+      } else {
+        await enterpriseApi.rejectRequest(activeApproval.id, commentText);
+        showMsg('Rejected successfully.');
+      }
+      setCommentDialogOpen(false);
+      setCommentText('');
       broadcastTasksRefresh();
       loadApprovals();
     } catch (e) {
-      showMsg(e.response?.data?.message || 'Approve failed', 'error');
+      showMsg(e.response?.data?.message || `${activeApproval.type === 'approve' ? 'Approve' : 'Reject'} failed`, 'error');
+    } finally {
+      setLoading(false);
     }
-  }, [showMsg, broadcastTasksRefresh, loadApprovals]);
+  }, [activeApproval, commentText, showMsg, broadcastTasksRefresh, loadApprovals]);
 
-  const rejectRequest = useCallback(async (id) => {
-    const comment = window.prompt('Optional comment for rejection', '') ?? '';
-    try {
-      await enterpriseApi.rejectRequest(id, comment);
-      showMsg('Rejected.');
-      broadcastTasksRefresh();
-      loadApprovals();
-    } catch (e) {
-      showMsg(e.response?.data?.message || 'Reject failed', 'error');
-    }
-  }, [showMsg, broadcastTasksRefresh, loadApprovals]);
+  const openApproveDialog = (id, title) => {
+    setActiveApproval({ id, type: 'approve', title });
+    setCommentText('');
+    setCommentDialogOpen(true);
+  };
+
+  const openRejectDialog = (id, title) => {
+    setActiveApproval({ id, type: 'reject', title });
+    setCommentText('');
+    setCommentDialogOpen(true);
+  };
 
   const createApiKey = useCallback(async () => {
     if (!projectId) return;
@@ -418,8 +434,8 @@ const Enterprise = () => {
                     Requested by {a.requestedBy?.fullName || a.requestedBy?.email}
                   </Typography>
                   <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
-                    <Button size="small" variant="contained" color="success" onClick={() => approveRequest(a._id)}>Approve</Button>
-                    <Button size="small" variant="outlined" color="warning" onClick={() => rejectRequest(a._id)}>Reject</Button>
+                    <Button size="small" variant="contained" color="success" onClick={() => openApproveDialog(a._id, a.taskId?.title)}>Approve</Button>
+                    <Button size="small" variant="outlined" color="warning" onClick={() => openRejectDialog(a._id, a.taskId?.title)}>Reject</Button>
                   </Stack>
                 </Paper>
               ))}
@@ -502,6 +518,42 @@ const Enterprise = () => {
           {tab === 4 && !admin && <Typography color="text.secondary">Admins only.</Typography>}
         </Box>
       </Paper>
+
+      {/* Comment Dialog */}
+      <Dialog open={commentDialogOpen} onClose={() => !loading && setCommentDialogOpen(false)} fullWidth maxWidth="xs">
+        <DialogTitle sx={{ fontWeight: 700 }}>
+          {activeApproval.type === 'approve' ? 'Approve Task' : 'Reject Task'}
+        </DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" sx={{ mb: 2 }}>
+            {activeApproval.type === 'approve' 
+              ? `Are you sure you want to approve "${activeApproval.title}"?` 
+              : `Are you sure you want to reject "${activeApproval.title}"?`}
+          </Typography>
+          <TextField
+            fullWidth
+            multiline
+            rows={3}
+            label="Comment (Optional)"
+            placeholder="Add a reason or feedback..."
+            value={commentText}
+            onChange={(e) => setCommentText(e.target.value)}
+            disabled={loading}
+            autoFocus
+          />
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setCommentDialogOpen(false)} disabled={loading}>Cancel</Button>
+          <Button 
+            onClick={handleConfirmApprovalAction} 
+            variant="contained" 
+            color={activeApproval.type === 'approve' ? 'success' : 'warning'}
+            disabled={loading}
+          >
+            {loading ? 'Processing...' : (activeApproval.type === 'approve' ? 'Confirm Approval' : 'Confirm Rejection')}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Container>
   );
 };

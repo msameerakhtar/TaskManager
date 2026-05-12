@@ -7,8 +7,8 @@ export const enterpriseApi = {
   getPendingApprovals: (projectId) =>
     api.get('/enterprise/approvals/pending', { params: { projectId } }),
 
-  approveRequest: (approvalId) =>
-    api.post(`/enterprise/approvals/${approvalId}/approve`),
+  approveRequest: (approvalId, comment) =>
+    api.post(`/enterprise/approvals/${approvalId}/approve`, { comment }),
 
   rejectRequest: (approvalId, comment) =>
     api.post(`/enterprise/approvals/${approvalId}/reject`, { comment }),

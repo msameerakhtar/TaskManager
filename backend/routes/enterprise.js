@@ -231,23 +231,25 @@ router.post('/approvals/:requestId/approve', async (req, res) => {
     try {
         const requestDoc = await ApprovalRequest.findById(req.params.requestId);
         if (!requestDoc || requestDoc.status !== 'pending') {
-            return res.status(404).json({ message: 'Approval request not found.' });
+            return res.status(404).json({ message: 'Approval request not found or already processed.' });
         }
 
         const project = await Project.findById(requestDoc.projectId);
         if (!project || getRole(project, req.user.id) !== 'admin') {
-            return res.status(403).json({ message: 'Only project admins can approve.' });
+            return res.status(403).json({ message: 'Only project admins can approve requests.' });
         }
 
         const task = await Task.findById(requestDoc.taskId);
         if (!task) return res.status(404).json({ message: 'Task not found.' });
 
+        // 1. Update Request Status
         requestDoc.status = 'approved';
         requestDoc.resolvedBy = req.user.id;
         requestDoc.resolvedAt = new Date();
-        requestDoc.comment = (req.body.comment || '').trim();
+        requestDoc.comment = (req.body?.comment || '').trim();
         await requestDoc.save();
 
+        // 2. Update Task Status
         task.status = 'done';
         task.completedAt = new Date();
         task.approvalStatus = 'approved';
@@ -259,11 +261,13 @@ router.post('/approvals/:requestId/approve', async (req, res) => {
         await task.save();
 
         const io = req.app.get('io');
+
+        // 3. Handle Recurring Tasks
         if (task.recurrence?.enabled && task.recurrence?.frequency) {
             const nextDueDate = getNextRecurringDate(task.dueDate, task.recurrence.frequency);
             if (nextDueDate) {
                 const nextTask = await Task.create({
-                    userId: task.userId,
+                    userId: task.userId, // Creator remains same
                     projectId: task.projectId,
                     assigneeId: task.assigneeId,
                     title: task.title,
@@ -274,8 +278,14 @@ router.post('/approvals/:requestId/approve', async (req, res) => {
                     estimatedHours: task.estimatedHours || 2,
                     recurrence: task.recurrence,
                     notes: task.notes || [],
-                    attachments: []
+                    attachments: [],
+                    activityLog: [{
+                        actorId: req.user.id,
+                        action: 'created',
+                        detail: 'Recurring task created automatically'
+                    }]
                 });
+                
                 if (io) {
                     io.to(`project:${project._id}`).emit('task:changed', {
                         action: 'created',
@@ -286,6 +296,7 @@ router.post('/approvals/:requestId/approve', async (req, res) => {
             }
         }
 
+        // 4. Audit Log
         await logAudit({
             actorId: req.user.id,
             projectId: project._id,
@@ -296,6 +307,7 @@ router.post('/approvals/:requestId/approve', async (req, res) => {
             ip: req.ip
         });
 
+        // 5. Notify frontend via socket
         if (io) {
             io.to(`project:${project._id}`).emit('task:changed', {
                 action: 'updated',
@@ -304,10 +316,13 @@ router.post('/approvals/:requestId/approve', async (req, res) => {
             });
         }
 
-        res.json({ request: requestDoc, task });
+        res.json({ success: true, request: requestDoc, task });
     } catch (err) {
-        console.error(err.message);
-        res.status(500).send('Server Error');
+        console.error('Approval Error Details:', err); // Detailed log
+        res.status(500).json({ 
+            message: 'Internal Server Error during approval', 
+            error: err.message 
+        });
     }
 });
 
@@ -330,7 +345,7 @@ router.post('/approvals/:requestId/reject', async (req, res) => {
         requestDoc.status = 'rejected';
         requestDoc.resolvedBy = req.user.id;
         requestDoc.resolvedAt = new Date();
-        requestDoc.comment = (req.body.comment || '').trim();
+        requestDoc.comment = (req.body?.comment || '').trim();
         await requestDoc.save();
 
         task.approvalStatus = 'rejected';
@@ -363,8 +378,11 @@ router.post('/approvals/:requestId/reject', async (req, res) => {
 
         res.json({ request: requestDoc, task });
     } catch (err) {
-        console.error(err.message);
-        res.status(500).send('Server Error');
+        console.error('Rejection Error Details:', err);
+        res.status(500).json({ 
+            message: 'Internal Server Error during rejection', 
+            error: err.message 
+        });
     }
 });
 

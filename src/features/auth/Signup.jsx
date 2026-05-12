@@ -12,13 +12,13 @@ import { useMutation } from '@tanstack/react-query';
 import { authApi } from '../../api/authApi';
 import { useDispatch } from 'react-redux';
 import { login } from '../auth/authSlice';
-import { useGoogleReCaptcha } from 'react-google-recaptcha-v3';
+// import { useGoogleReCaptcha } from 'react-google-recaptcha-v3';
 
 const Signup = ({ mode, setMode }) => {
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
   
-  const { executeRecaptcha } = useGoogleReCaptcha();
+  // const { executeRecaptcha } = useGoogleReCaptcha();
 
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
@@ -69,17 +69,17 @@ const Signup = ({ mode, setMode }) => {
     if (password !== confirmPassword) return setError("Passwords do not match.");
 
     // Get reCAPTCHA v3 token silently
-    let recaptchaToken = '';
-    if (executeRecaptcha) {
-      recaptchaToken = await executeRecaptcha('signup');
-    }
+    // let recaptchaToken = '';
+    // if (executeRecaptcha) {
+    //   recaptchaToken = await executeRecaptcha('signup');
+    // }
 
     signupMutation.mutate({
       fullName: fullName.trim(),
       email: email.trim(),
       password,
       avatarUrl: "",
-      recaptchaToken,
+      // recaptchaToken,
     });
   };
 

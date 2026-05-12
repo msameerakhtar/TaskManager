@@ -292,7 +292,19 @@ const Navbar = ({ mode, toggleTheme }) => {
                                     anchorEl={notificationAnchorEl}
                                     open={Boolean(notificationAnchorEl)}
                                     onClose={() => setNotificationAnchorEl(null)}
-                                    PaperProps={{ sx: { borderRadius: '12px', mt: 1.5, minWidth: 320, maxWidth: 360 } }}
+                                    PaperProps={{ 
+                                        sx: { 
+                                            borderRadius: '12px', 
+                                            mt: 1.5, 
+                                            minWidth: 320, 
+                                            maxWidth: 360,
+                                            maxHeight: '450px',
+                                            overflowY: 'auto',
+                                            '&::-webkit-scrollbar': { display: 'none' },
+                                            msOverflowStyle: 'none',
+                                            scrollbarWidth: 'none'
+                                        } 
+                                    }}
                                 >
                                     <Box sx={{ px: 1.5, py: 1, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                                         <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>Notifications</Typography>
