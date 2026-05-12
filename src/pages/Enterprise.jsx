@@ -382,7 +382,7 @@ const Enterprise = () => {
                     disabled={!admin}
                   />
                 )}
-                label="Email project admins on SLA escalations (needs SMTP_* in server env)"
+                label="Email project admins on SLA escalations"
               />
               <Stack direction="row" spacing={1}>
                 <Button variant="outlined" onClick={testSlack} disabled={!admin || !projectId}>Test Slack</Button>
@@ -526,8 +526,8 @@ const Enterprise = () => {
         </DialogTitle>
         <DialogContent>
           <Typography variant="body2" sx={{ mb: 2 }}>
-            {activeApproval.type === 'approve' 
-              ? `Are you sure you want to approve "${activeApproval.title}"?` 
+            {activeApproval.type === 'approve'
+              ? `Are you sure you want to approve "${activeApproval.title}"?`
               : `Are you sure you want to reject "${activeApproval.title}"?`}
           </Typography>
           <TextField
@@ -544,9 +544,9 @@ const Enterprise = () => {
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
           <Button onClick={() => setCommentDialogOpen(false)} disabled={loading}>Cancel</Button>
-          <Button 
-            onClick={handleConfirmApprovalAction} 
-            variant="contained" 
+          <Button
+            onClick={handleConfirmApprovalAction}
+            variant="contained"
             color={activeApproval.type === 'approve' ? 'success' : 'warning'}
             disabled={loading}
           >
