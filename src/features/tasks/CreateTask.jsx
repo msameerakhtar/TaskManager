@@ -1,32 +1,44 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import {
     Modal, Box, Typography, TextField, Button,
-    Stack, Backdrop, Fade, CircularProgress, MenuItem,
+    Stack, Backdrop, Fade, MenuItem,
     Snackbar, Alert, useTheme
 } from '@mui/material';
-import axios from 'axios';
-import API_BASE_URL from '../../config/api';
+import CustomLoader from '../../components/CustomLoader';
+import { taskApi } from '../../api/taskApi';
 import { useSelector } from 'react-redux';
 
-const CreateTask = ({ open, handleClose, refreshTasks }) => {
+const CreateTask = ({ open, handleClose, refreshTasks, selectedProjectId, projectMembers = [] }) => {
     const theme = useTheme();
     const isDark = theme.palette.mode === 'dark';
-    const token = useSelector((state) => state.auth.token);
+    const token = useSelector((state) => state.auth.token); // kept for auth-guard check only
 
     const [formData, setFormData] = useState({
         title: '',
         description: '',
-        status: 'pendiente'
+        status: 'todo',
+        priority: 'medium',
+        dueDate: '',
+        recurrenceEnabled: false,
+        recurrenceFrequency: 'daily',
+        initialNote: '',
+        assigneeId: '',
+        estimatedHours: 2
     });
     const [loading, setLoading] = useState(false);
     const [feedback, setFeedback] = useState({ open: false, message: '', severity: 'success' });
+    const [suggestionLoading, setSuggestionLoading] = useState(false);
 
-    const modalStyle = {
+    const modalStyle = useMemo(() => ({
         position: 'absolute',
         top: '50%',
         left: '50%',
         transform: 'translate(-50%, -50%)',
         width: { xs: '90%', sm: 450 },
+        maxHeight: '90vh',
+        overflowY: 'auto',
+        scrollbarWidth: 'none',
+        '&::-webkit-scrollbar': { display: 'none' },
         bgcolor: 'background.paper',
         border: '1px solid',
         borderColor: 'divider',
@@ -34,9 +46,9 @@ const CreateTask = ({ open, handleClose, refreshTasks }) => {
         boxShadow: isDark ? '0 25px 50px -12px rgba(0, 0, 0, 0.5)' : '0 25px 50px -12px rgba(0, 0, 0, 0.1)',
         p: 4,
         backdropFilter: 'blur(10px)',
-    };
+    }), [isDark]);
 
-    const textFieldStyle = {
+    const textFieldStyle = useMemo(() => ({
         '& .MuiOutlinedInput-root': {
             color: 'text.primary',
             bgcolor: isDark ? 'rgba(255, 255, 255, 0.03)' : 'rgba(0, 0, 0, 0.02)',
@@ -47,36 +59,121 @@ const CreateTask = ({ open, handleClose, refreshTasks }) => {
         },
         '& .MuiInputLabel-root': { color: 'text.secondary' },
         '& .MuiInputLabel-root.Mui-focused': { color: 'primary.main' },
-    };
+    }), [isDark]);
 
-    const handleChange = (e) => {
+    const handleChange = useCallback((e) => {
         const { name, value } = e.target;
         setFormData(prev => ({ ...prev, [name]: value }));
-    };
+    }, []);
 
-    const handleSnackbarClose = () => {
+    const handleSnackbarClose = useCallback(() => {
         setFeedback(prev => ({ ...prev, open: false }));
-    };
+    }, []);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+        if (!formData.title.trim()) {
+            setFeedback({ open: true, message: 'Title is required.', severity: 'warning' });
+            return;
+        }
+        if (!formData.dueDate) {
+            setFeedback({ open: true, message: 'Due date is required.', severity: 'warning' });
+            return;
+        }
+        if (!selectedProjectId) {
+            setFeedback({ open: true, message: 'Please select a workspace first.', severity: 'warning' });
+            return;
+        }
         setLoading(true);
 
         try {
-            await axios.post(`${API_BASE_URL}/tasks`, formData, {
-                headers: { 'x-auth-token': token }
-            });
+            const payload = {
+                title: formData.title,
+                description: formData.description,
+                status: formData.status,
+                priority: formData.priority,
+                dueDate: formData.dueDate,
+                projectId: selectedProjectId,
+                assigneeId: formData.assigneeId || null,
+                estimatedHours: Number(formData.estimatedHours) || 2,
+                recurrence: formData.recurrenceEnabled
+                    ? { enabled: true, frequency: formData.recurrenceFrequency }
+                    : { enabled: false },
+                notes: formData.initialNote.trim()
+                    ? [{ content: formData.initialNote.trim() }]
+                    : []
+            };
 
-            setFormData({ title: '', description: '', status: 'pendiente' });
+            await taskApi.createTask(payload);
+
+            setFormData({
+                title: '',
+                description: '',
+                status: 'todo',
+                priority: 'medium',
+                dueDate: '',
+                recurrenceEnabled: false,
+                recurrenceFrequency: 'daily',
+                initialNote: '',
+                assigneeId: '',
+                estimatedHours: 2
+            });
             refreshTasks();
             setFeedback({ open: true, message: 'Task Added Successfully!', severity: 'success' });
 
             setTimeout(handleClose, 1500);
         } catch (error) {
-            const errorMsg = error.response?.data || "Error while adding task!";
+            const errorMsg = error.response?.data?.message || error.response?.data || "Error while adding task!";
             setFeedback({ open: true, message: errorMsg, severity: 'error' });
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleSuggestDeadline = async () => {
+        if (!selectedProjectId || !formData.dueDate) return;
+        setSuggestionLoading(true);
+        try {
+            const response = await taskApi.suggestDeadline({
+                projectId: selectedProjectId,
+                assigneeId: formData.assigneeId || null,
+                dueDate: formData.dueDate,
+                estimatedHours: Number(formData.estimatedHours) || 2
+            });
+            const data = response.data;
+            if (!data.feasible && data.suggestedDueDate) {
+                const date = new Date(data.suggestedDueDate).toISOString().split('T')[0];
+                setFormData((prev) => ({ ...prev, dueDate: date }));
+                setFeedback({ open: true, severity: 'info', message: `Suggested deadline applied (+${data.extraDays} days).` });
+            } else {
+                setFeedback({ open: true, severity: 'success', message: 'Current deadline looks feasible.' });
+            }
+        } catch (error) {
+            setFeedback({ open: true, severity: 'error', message: error.response?.data?.message || 'Failed to suggest deadline.' });
+        } finally {
+            setSuggestionLoading(false);
+        }
+    };
+
+    const handleSuggestPriority = async () => {
+        if (!selectedProjectId || !formData.dueDate) return;
+        setSuggestionLoading(true);
+        try {
+            const response = await taskApi.suggestPriority({
+                projectId: selectedProjectId,
+                assigneeId: formData.assigneeId || null,
+                dueDate: formData.dueDate,
+                estimatedHours: Number(formData.estimatedHours) || 2
+            });
+            const nextPriority = response.data?.priority;
+            if (nextPriority) {
+                setFormData((prev) => ({ ...prev, priority: nextPriority }));
+                setFeedback({ open: true, severity: 'info', message: `Suggested priority applied: ${nextPriority}.` });
+            }
+        } catch (error) {
+            setFeedback({ open: true, severity: 'error', message: error.response?.data?.message || 'Failed to suggest priority.' });
+        } finally {
+            setSuggestionLoading(false);
         }
     };
 
@@ -151,9 +248,117 @@ const CreateTask = ({ open, handleClose, refreshTasks }) => {
                                         }
                                     }}
                                 >
-                                    <MenuItem value="pendiente">Pending</MenuItem>
-                                    <MenuItem value="completada">Completed</MenuItem>
+                                    <MenuItem value="todo">Todo</MenuItem>
+                                    <MenuItem value="in_progress">In Progress</MenuItem>
+                                    <MenuItem value="done">Done</MenuItem>
                                 </TextField>
+
+                                <TextField
+                                    select
+                                    fullWidth
+                                    label="Priority"
+                                    name="priority"
+                                    value={formData.priority}
+                                    onChange={handleChange}
+                                    disabled={loading}
+                                    sx={textFieldStyle}
+                                >
+                                    <MenuItem value="low">Low</MenuItem>
+                                    <MenuItem value="medium">Medium</MenuItem>
+                                    <MenuItem value="high">High</MenuItem>
+                                </TextField>
+
+                                <TextField
+                                    fullWidth
+                                    type="date"
+                                    label="Due Date"
+                                    name="dueDate"
+                                    value={formData.dueDate}
+                                    onChange={handleChange}
+                                    disabled={loading}
+                                    required
+                                    InputLabelProps={{ shrink: true }}
+                                    sx={textFieldStyle}
+                                />
+                                <TextField
+                                    fullWidth
+                                    label="Estimated Hours"
+                                    name="estimatedHours"
+                                    type="number"
+                                    value={formData.estimatedHours}
+                                    onChange={handleChange}
+                                    disabled={loading}
+                                    inputProps={{ min: 0.5, step: 0.5 }}
+                                    sx={textFieldStyle}
+                                />
+                                <TextField
+                                    select
+                                    fullWidth
+                                    label="Assign To"
+                                    name="assigneeId"
+                                    value={formData.assigneeId}
+                                    onChange={handleChange}
+                                    disabled={loading}
+                                    sx={textFieldStyle}
+                                >
+                                    <MenuItem value="">Unassigned</MenuItem>
+                                    {projectMembers.map((member) => (
+                                        <MenuItem key={member.userId?._id || member.userId} value={member.userId?._id || member.userId}>
+                                            {member.userId?.fullName || member.userId?.email || 'Member'}
+                                        </MenuItem>
+                                    ))}
+                                </TextField>
+                                <TextField
+                                    select
+                                    fullWidth
+                                    label="Recurring Task"
+                                    name="recurrenceEnabled"
+                                    value={formData.recurrenceEnabled ? 'yes' : 'no'}
+                                    onChange={(e) => setFormData((prev) => ({
+                                        ...prev,
+                                        recurrenceEnabled: e.target.value === 'yes'
+                                    }))}
+                                    disabled={loading}
+                                    sx={textFieldStyle}
+                                >
+                                    <MenuItem value="no">No</MenuItem>
+                                    <MenuItem value="yes">Yes</MenuItem>
+                                </TextField>
+                                {formData.recurrenceEnabled && (
+                                    <TextField
+                                        select
+                                        fullWidth
+                                        label="Recurrence Frequency"
+                                        name="recurrenceFrequency"
+                                        value={formData.recurrenceFrequency}
+                                        onChange={handleChange}
+                                        disabled={loading}
+                                        sx={textFieldStyle}
+                                    >
+                                        <MenuItem value="daily">Daily</MenuItem>
+                                        <MenuItem value="weekly">Weekly</MenuItem>
+                                        <MenuItem value="monthly">Monthly</MenuItem>
+                                    </TextField>
+                                )}
+                                <TextField
+                                    fullWidth
+                                    label="Initial Note (optional)"
+                                    name="initialNote"
+                                    multiline
+                                    rows={2}
+                                    value={formData.initialNote}
+                                    onChange={handleChange}
+                                    disabled={loading}
+                                    sx={textFieldStyle}
+                                />
+                                <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
+                                    <Button variant="outlined" onClick={handleSuggestDeadline} disabled={loading || suggestionLoading} sx={{ textTransform: 'none' }}>
+                                        Suggest Deadline
+                                    </Button>
+                                    <Button variant="outlined" onClick={handleSuggestPriority} disabled={loading || suggestionLoading} sx={{ textTransform: 'none' }}>
+                                        Suggest Priority
+                                    </Button>
+                                </Stack>
 
                                 <Button
                                     type="submit"
@@ -173,7 +378,7 @@ const CreateTask = ({ open, handleClose, refreshTasks }) => {
                                         transition: 'all 0.2s'
                                     }}
                                 >
-                                    {loading ? <CircularProgress size={24} sx={{ color: '#fff' }} /> : 'Create Task'}
+                                    {loading ? <CustomLoader size={24} sx={{ color: '#fff' }} /> : 'Create Task'}
                                 </Button>
                             </Stack>
                         </form>

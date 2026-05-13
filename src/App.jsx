@@ -1,16 +1,26 @@
-import React, { useState, useMemo } from 'react';
+import React, { lazy, Suspense, useState, useMemo, useCallback } from 'react';
 import { createBrowserRouter, RouterProvider, Navigate } from 'react-router-dom';
-import { CssBaseline, ThemeProvider } from '@mui/material';
+import { Box, CssBaseline, ThemeProvider } from '@mui/material';
+// import { GoogleReCaptchaProvider } from 'react-google-recaptcha-v3';
 import theme from './theme/index'; 
-import Home from './pages/Home';
-import Profile from './pages/Profile'; 
-import Layout from './layout/Layout'; 
-import Login from './features/auth/Login';
-import Signup from './features/auth/Signup';
-import TaskList from './features/tasks/TaskList';
 import ProtectedRoute from './routes/ProtectedRoute';
-import ContactUs from './pages/ContactUs';
-import Blog from './pages/Blog';
+import CustomLoader from './components/CustomLoader';
+
+const Home = lazy(() => import('./pages/Home'));
+const Profile = lazy(() => import('./pages/Profile'));
+const Layout = lazy(() => import('./layout/Layout'));
+const Login = lazy(() => import('./features/auth/Login'));
+const Signup = lazy(() => import('./features/auth/Signup'));
+const TaskList = lazy(() => import('./features/tasks/TaskList'));
+const ContactUs = lazy(() => import('./pages/ContactUs'));
+const Blog = lazy(() => import('./pages/Blog'));
+const Enterprise = lazy(() => import('./pages/Enterprise'));
+
+const PageLoader = () => (
+  <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '40vh' }}>
+    <CustomLoader size={60} />
+  </Box>
+);
 
 const App = () => {
   const [mode, setMode] = useState('dark');
@@ -20,19 +30,19 @@ const App = () => {
     return theme(currentMode);
   }, [mode]);
 
-  const toggleTheme = () => {
+  const toggleTheme = useCallback(() => {
     setMode((prev) => (prev === 'light' ? 'dark' : 'light'));
-  };
+  }, []);
 
-  const handleSetMode = (newMode) => {
+  const handleSetMode = useCallback((newMode) => {
     if (typeof newMode === 'string') {
       setMode(newMode);
     } else {
       setMode((prev) => (prev === 'light' ? 'dark' : 'light'));
     }
-  };
+  }, []);
 
-  const router = createBrowserRouter([
+  const router = useMemo(() => createBrowserRouter([
     { 
       path: "/", 
       element: <Home setMode={handleSetMode} mode={mode} /> 
@@ -54,17 +64,25 @@ const App = () => {
       children: [
         { path: "/tasks", element: <TaskList /> },
         { path: "/profile", element: <Profile /> },
+        { path: "/enterprise", element: <Enterprise /> },
         { path: "/contact", element: <ContactUs /> },
         { path: "/blog", element: <Blog /> }
       ]
     },
     { path: "*", element: <Navigate to="/" replace /> }
-  ]);
+  ]), [mode, handleSetMode, toggleTheme]);
 
   return (
     <ThemeProvider theme={activeTheme}>
       <CssBaseline />
-      <RouterProvider router={router} />
+      {/* <GoogleReCaptchaProvider
+        reCaptchaKey={import.meta.env.VITE_RECAPTCHA_SITE_KEY}
+        scriptProps={{ async: true, defer: true }}
+      > */}
+        <Suspense fallback={<PageLoader />}>
+          <RouterProvider router={router} />
+        </Suspense>
+      {/* </GoogleReCaptchaProvider> */}
     </ThemeProvider>
   );
 };

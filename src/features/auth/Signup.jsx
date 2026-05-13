@@ -1,21 +1,25 @@
 import React, { useState, useEffect } from 'react';
 import { 
   TextField, Button, Typography, Paper, Container, 
-  Box, Link, Alert, Avatar, CircularProgress, InputAdornment, IconButton, useTheme 
+  Box, Link, Alert, Avatar, InputAdornment, IconButton, useTheme 
 } from '@mui/material';
+import CustomLoader from '../../components/CustomLoader';
 import { PhotoCamera, Visibility, VisibilityOff } from '@mui/icons-material';
 import LightModeIcon from '@mui/icons-material/LightMode';
 import DarkModeIcon from '@mui/icons-material/DarkMode';
 import { useNavigate, Link as RouterLink } from 'react-router-dom';
-import axios from 'axios';
-import API_BASE_URL from '../../config/api';
+import { useMutation } from '@tanstack/react-query';
+import { authApi } from '../../api/authApi';
 import { useDispatch } from 'react-redux';
 import { login } from '../auth/authSlice';
+// import { useGoogleReCaptcha } from 'react-google-recaptcha-v3';
 
 const Signup = ({ mode, setMode }) => {
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
   
+  // const { executeRecaptcha } = useGoogleReCaptcha();
+
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -24,10 +28,27 @@ const Signup = ({ mode, setMode }) => {
   const [imageFile, setImageFile] = useState(null);
   const [previewUrl, setPreviewUrl] = useState('');
   const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
   
   const navigate = useNavigate();
   const dispatch = useDispatch();
+
+  const signupMutation = useMutation({
+    mutationFn: (data) => authApi.signup(data).then(res => res.data),
+    onSuccess: ({ token, user }) => {
+      if (token) {
+        dispatch(login({ user, token }));
+        navigate('/tasks', { replace: true });
+      } else {
+        alert("Account created successfully! Please login.");
+        navigate('/login');
+      }
+    },
+    onError: (err) => {
+      setError(err.response?.data?.message || err.message || "Registration failed.");
+    },
+  });
+
+  const loading = signupMutation.isPending;
 
   useEffect(() => {
     return () => { if (previewUrl) URL.revokeObjectURL(previewUrl); };
@@ -46,33 +67,20 @@ const Signup = ({ mode, setMode }) => {
     e.preventDefault();
     setError('');
     if (password !== confirmPassword) return setError("Passwords do not match.");
-    setLoading(true);
 
-    try {
-      // Note: Backend image upload logic can be added later using Multer.
-      // For now, we'll just send the text data.
-      const response = await axios.post(`${API_BASE_URL}/auth/signup`, {
-        fullName: fullName.trim(),
-        email: email.trim(),
-        password,
-        avatarUrl: "" // Placeholder for now
-      });
+    // Get reCAPTCHA v3 token silently
+    // let recaptchaToken = '';
+    // if (executeRecaptcha) {
+    //   recaptchaToken = await executeRecaptcha('signup');
+    // }
 
-      const { token, user } = response.data;
-
-      if (token) {
-        dispatch(login({ user: user, token: token }));
-        navigate('/tasks', { replace: true });
-      } else {
-        alert("Account created successfully! Please login.");
-        navigate('/login');
-      }
-    } catch (err) {
-      const errorMsg = err.response?.data?.message || err.message || "Registration failed.";
-      setError(errorMsg);
-    } finally {
-      setLoading(false);
-    }
+    signupMutation.mutate({
+      fullName: fullName.trim(),
+      email: email.trim(),
+      password,
+      avatarUrl: "",
+      // recaptchaToken,
+    });
   };
 
   return (
@@ -106,7 +114,7 @@ const Signup = ({ mode, setMode }) => {
             <TextField fullWidth label="Confirm Password" type={showPassword ? 'text' : 'password'} margin="normal" variant="filled" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} sx={{ '& .MuiFilledInput-root': { borderRadius: '12px' }, mb: 2 }} />
 
             <Button fullWidth variant="contained" type="submit" disabled={loading} sx={{ mt: 2, py: 1.8, borderRadius: '14px', background: `linear-gradient(45deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})` }}>
-              {loading ? <CircularProgress size={24} color="inherit" /> : 'Create Account'}
+              {loading ? <CustomLoader size={24} sx={{ color: '#fff' }} /> : 'Create Account'}
             </Button>
           </form>
           <Typography mt={4} sx={{ color: 'text.secondary' }}>

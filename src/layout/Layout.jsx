@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Box, Container, CircularProgress } from '@mui/material';
+import { Box, Container } from '@mui/material';
+import CustomLoader from '../components/CustomLoader';
 import { Outlet, useNavigate } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import { logout } from '../features/auth/authSlice';
@@ -26,7 +27,7 @@ const Layout = ({ toggleTheme, mode }) => {
     };
 
     if (isInitialLoading) {
-        return <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}><CircularProgress /></Box>;
+        return <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}><CustomLoader size={60} /></Box>;
     }
 
     return (

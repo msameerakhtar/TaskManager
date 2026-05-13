@@ -1,0 +1,76 @@
+import { useEffect, useRef } from 'react';
+import { io } from 'socket.io-client';
+import { API_BASE_URL } from '../../../api/axiosInstance';
+
+/**
+ * Custom hook to manage Socket.io connection for real-time task updates.
+ * Handles project join/leave, presence tracking, and event listeners.
+ */
+const useTaskSocket = ({
+  token,
+  selectedProjectId,
+  fetchTasks,
+  fetchProjects,
+  fetchNotifications,
+  fetchPhase4Data,
+  setOnlineCount
+}) => {
+  const socketRef = useRef(null);
+  const activeProjectRef = useRef(null);
+
+  // Connect socket & register event listeners
+  useEffect(() => {
+    if (!token) return undefined;
+    const socketBaseUrl = API_BASE_URL.replace('/api', '');
+    const socket = io(socketBaseUrl, {
+      auth: { token },
+      transports: ['polling']
+    });
+    socketRef.current = socket;
+
+    socket.on('task:changed', ({ projectId }) => {
+      if (projectId && projectId === activeProjectRef.current) {
+        fetchTasks();
+        fetchPhase4Data();
+      }
+    });
+    socket.on('presence:update', ({ projectId, onlineCount: nextOnlineCount }) => {
+      if (projectId && projectId === activeProjectRef.current) {
+        setOnlineCount(nextOnlineCount || 0);
+      }
+    });
+    socket.on('notification:new', () => {
+      fetchNotifications();
+    });
+    socket.on('project:updated', ({ projectId }) => {
+      if (projectId && projectId === activeProjectRef.current) {
+        fetchProjects();
+        fetchPhase4Data();
+      }
+    });
+
+    return () => {
+      if (activeProjectRef.current) {
+        socket.emit('project:leave', { projectId: activeProjectRef.current });
+      }
+      socket.disconnect();
+      socketRef.current = null;
+    };
+  }, [token, fetchTasks]);
+
+  // Handle project room switching
+  useEffect(() => {
+    const socket = socketRef.current;
+    if (!socket || !selectedProjectId) return;
+    if (activeProjectRef.current && activeProjectRef.current !== selectedProjectId) {
+      socket.emit('project:leave', { projectId: activeProjectRef.current });
+    }
+    socket.emit('project:join', { projectId: selectedProjectId });
+    activeProjectRef.current = selectedProjectId;
+    setOnlineCount(0);
+  }, [selectedProjectId]);
+
+  return socketRef;
+};
+
+export default useTaskSocket;

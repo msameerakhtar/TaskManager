@@ -7,9 +7,9 @@ const Profile = () => {
     const isDark = theme.palette.mode === 'dark';
     
     const user = useSelector((state) => state.auth.user);
-    const fullName = user?.user_metadata?.full_name || "User";
+    const fullName = user?.fullName || user?.user_metadata?.full_name || user?.email?.split('@')[0] || "User";
     const email = user?.email || "N/A";
-    const avatarUrl = user?.user_metadata?.avatar_url;
+    const avatarUrl = user?.avatarUrl || user?.user_metadata?.avatar_url;
 
     return (
         <Container maxWidth="sm" sx={{ py: 8 }}>

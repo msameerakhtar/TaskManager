@@ -1,37 +1,66 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { 
     Modal, Box, Typography, TextField, Button, 
-    Stack, MenuItem, CircularProgress, Snackbar, Alert, Backdrop, Fade, useTheme
+    Stack, MenuItem, Snackbar, Alert, Backdrop, Fade, useTheme, Divider, List, ListItem, ListItemText
 } from '@mui/material';
-import axios from 'axios';
-import API_BASE_URL from '../../config/api';
+import CustomLoader from '../../components/CustomLoader';
+import { taskApi } from '../../api/taskApi';
+import { API_BASE_URL } from '../../api/axiosInstance';
 import { useSelector } from 'react-redux';
 
-const UpdateTask = ({ open, handleClose, taskData, onUpdateSuccess }) => {
+const UpdateTask = ({ open, handleClose, taskData, onUpdateSuccess, projectMembers = [] }) => {
     const theme = useTheme();
     const isDark = theme.palette.mode === 'dark';
     const token = useSelector((state) => state.auth.token);
 
-    const [formData, setFormData] = useState({ title: '', description: '', status: 'pendiente' });
+    const [formData, setFormData] = useState({
+        title: '',
+        description: '',
+        status: 'todo',
+        priority: 'medium',
+        dueDate: '',
+        recurrenceEnabled: false,
+        recurrenceFrequency: 'daily',
+        assigneeId: ''
+    });
     const [loading, setLoading] = useState(false);
+    const [uploadLoading, setUploadLoading] = useState(false);
     const [feedback, setFeedback] = useState({ open: false, message: '', severity: 'success' });
+    const [newNote, setNewNote] = useState('');
+    const [selectedFile, setSelectedFile] = useState(null);
+    const [notesList, setNotesList] = useState([]);
+    const [attachmentsList, setAttachmentsList] = useState([]);
+    const [commentsList, setCommentsList] = useState([]);
+    const [activityList, setActivityList] = useState([]);
+    const [newComment, setNewComment] = useState('');
 
     useEffect(() => {
         if (taskData && open) {
+            setNotesList(Array.isArray(taskData.notes) ? taskData.notes : []);
+            setAttachmentsList(Array.isArray(taskData.attachments) ? taskData.attachments : []);
+            setCommentsList(Array.isArray(taskData.comments) ? taskData.comments : []);
+            setActivityList(Array.isArray(taskData.activityLog) ? taskData.activityLog : []);
             setFormData({
                 title: taskData.title || taskData.task || '',
                 description: taskData.description || '',
-                status: taskData.status || 'pendiente'
+                status: taskData.status || 'todo',
+                priority: taskData.priority || 'medium',
+                dueDate: taskData.dueDate ? new Date(taskData.dueDate).toISOString().split('T')[0] : '',
+                recurrenceEnabled: Boolean(taskData.recurrence?.enabled),
+                recurrenceFrequency: taskData.recurrence?.frequency || 'daily',
+                assigneeId: taskData.assigneeId?._id || taskData.assigneeId || ''
             });
         }
     }, [taskData, open]);
 
-    const modalStyle = {
+    const modalStyle = useMemo(() => ({
         position: 'absolute',
         top: '50%',
         left: '50%',
         transform: 'translate(-50%, -50%)',
-        width: { xs: '90%', sm: 450 },
+        width: { xs: '90%', sm: 500 },
+        maxHeight: '90vh',
+        overflowY: 'auto',
         bgcolor: 'background.paper',
         border: '1px solid',
         borderColor: 'divider',
@@ -39,9 +68,12 @@ const UpdateTask = ({ open, handleClose, taskData, onUpdateSuccess }) => {
         boxShadow: isDark ? '0 25px 50px -12px rgba(0, 0, 0, 0.5)' : '0 25px 50px -12px rgba(0, 0, 0, 0.1)',
         p: 4,
         backdropFilter: 'blur(10px)',
-    };
+        '&::-webkit-scrollbar': { display: 'none' },
+        msOverflowStyle: 'none',
+        scrollbarWidth: 'none',
+    }), [isDark]);
 
-    const textFieldStyle = {
+    const textFieldStyle = useMemo(() => ({
         '& .MuiOutlinedInput-root': {
             color: 'text.primary',
             bgcolor: isDark ? 'rgba(255, 255, 255, 0.03)' : 'rgba(0, 0, 0, 0.02)',
@@ -52,16 +84,22 @@ const UpdateTask = ({ open, handleClose, taskData, onUpdateSuccess }) => {
         },
         '& .MuiInputLabel-root': { color: 'text.secondary' },
         '& .MuiInputLabel-root.Mui-focused': { color: 'primary.main' },
-    };
+    }), [isDark]);
 
-    const handleChange = (e) => {
-        setFormData({ ...formData, [e.target.name]: e.target.value });
-    };
+    const handleChange = useCallback((e) => {
+        setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
+    }, []);
 
-    const isChanged = 
+    const isChanged = useMemo(() =>
         formData.title !== (taskData.title || taskData.task || '') ||
         formData.description !== (taskData.description || '') ||
-        formData.status !== (taskData.status || 'pendiente');
+        formData.status !== (taskData.status || 'todo') ||
+        formData.priority !== (taskData.priority || 'medium') ||
+        formData.dueDate !== (taskData.dueDate ? new Date(taskData.dueDate).toISOString().split('T')[0] : '') ||
+        formData.recurrenceEnabled !== Boolean(taskData.recurrence?.enabled) ||
+        formData.recurrenceFrequency !== (taskData.recurrence?.frequency || 'daily') ||
+        formData.assigneeId !== (taskData.assigneeId?._id || taskData.assigneeId || '')
+    , [formData, taskData]);
 
     const handleUpdate = async (e) => {
         e.preventDefault();
@@ -71,14 +109,44 @@ const UpdateTask = ({ open, handleClose, taskData, onUpdateSuccess }) => {
             setFeedback({ open: true, message: 'Title cannot be empty!', severity: 'warning' });
             return;
         }
+        if (!formData.dueDate) {
+            setFeedback({ open: true, message: 'Due date is required!', severity: 'warning' });
+            return;
+        }
 
         setLoading(true);
         try {
-            await axios.put(`${API_BASE_URL}/tasks/${taskId}`, formData, {
-                headers: { 'x-auth-token': token }
+            const projectId = taskData.projectId?._id || taskData.projectId;
+            const { data } = await taskApi.updateTask(taskId, {
+                title: formData.title,
+                description: formData.description,
+                status: formData.status,
+                priority: formData.priority,
+                dueDate: formData.dueDate,
+                assigneeId: formData.assigneeId || null,
+                projectId: projectId || undefined,
+                estimatedHours: taskData.estimatedHours != null ? Number(taskData.estimatedHours) : undefined,
+                recurrence: formData.recurrenceEnabled
+                    ? { enabled: true, frequency: formData.recurrenceFrequency }
+                    : { enabled: false }
             });
+
+            if (data?.requiresApproval) {
+                setFeedback({
+                    open: true,
+                    message: 'Completion sent for admin approval. Task stays in progress until an admin approves.',
+                    severity: 'info'
+                });
+                setFormData((prev) => ({
+                    ...prev,
+                    status: data.status || prev.status
+                }));
+                onUpdateSuccess();
+                return;
+            }
+
             setFeedback({ open: true, message: 'Task updated successfully!', severity: 'success' });
-            
+
             setTimeout(() => {
                 onUpdateSuccess();
                 handleClose();
@@ -86,11 +154,62 @@ const UpdateTask = ({ open, handleClose, taskData, onUpdateSuccess }) => {
         } catch (error) {
             setFeedback({ 
                 open: true, 
-                message: error.response?.data || 'Update failed!', 
+                message: error.response?.data?.message || error.response?.data || 'Update failed!', 
                 severity: 'error' 
             });
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleAddComment = async () => {
+        if (!newComment.trim() || !taskData?.id) return;
+        setUploadLoading(true);
+        try {
+            const response = await taskApi.addComment(taskData.id, newComment.trim());
+            setNewComment('');
+            setCommentsList(response.data.comments || []);
+            setActivityList(response.data.activityLog || []);
+            onUpdateSuccess();
+            setFeedback({ open: true, message: 'Comment added successfully!', severity: 'success' });
+        } catch (error) {
+            setFeedback({ open: true, message: error.response?.data?.message || 'Failed to add comment.', severity: 'error' });
+        } finally {
+            setUploadLoading(false);
+        }
+    };
+
+    const handleAddNote = async () => {
+        if (!newNote.trim() || !taskData?.id) return;
+        setUploadLoading(true);
+        try {
+            const response = await taskApi.addNote(taskData.id, newNote.trim());
+            setNewNote('');
+            setNotesList(response.data.notes || []);
+            onUpdateSuccess();
+            setFeedback({ open: true, message: 'Note added successfully!', severity: 'success' });
+        } catch (error) {
+            setFeedback({ open: true, message: error.response?.data?.message || 'Failed to add note.', severity: 'error' });
+        } finally {
+            setUploadLoading(false);
+        }
+    };
+
+    const handleAttachmentUpload = async () => {
+        if (!selectedFile || !taskData?.id) return;
+        setUploadLoading(true);
+        try {
+            const body = new FormData();
+            body.append('attachment', selectedFile);
+            const response = await taskApi.addAttachment(taskData.id, body);
+            setSelectedFile(null);
+            setAttachmentsList(response.data.attachments || []);
+            onUpdateSuccess();
+            setFeedback({ open: true, message: 'Attachment uploaded successfully!', severity: 'success' });
+        } catch (error) {
+            setFeedback({ open: true, message: error.response?.data?.message || 'Attachment upload failed.', severity: 'error' });
+        } finally {
+            setUploadLoading(false);
         }
     };
 
@@ -162,9 +281,208 @@ const UpdateTask = ({ open, handleClose, taskData, onUpdateSuccess }) => {
                                         }
                                     }}
                                 >
-                                    <MenuItem value="pendiente">Pending</MenuItem>
-                                    <MenuItem value="completada">Completed</MenuItem>
+                                    <MenuItem value="todo">Todo</MenuItem>
+                                    <MenuItem value="in_progress">In Progress</MenuItem>
+                                    <MenuItem value="done">Done</MenuItem>
                                 </TextField>
+                                <TextField
+                                    select
+                                    label="Priority"
+                                    name="priority"
+                                    value={formData.priority}
+                                    onChange={handleChange}
+                                    fullWidth
+                                    disabled={loading}
+                                    sx={textFieldStyle}
+                                >
+                                    <MenuItem value="low">Low</MenuItem>
+                                    <MenuItem value="medium">Medium</MenuItem>
+                                    <MenuItem value="high">High</MenuItem>
+                                </TextField>
+                                <TextField
+                                    label="Due Date"
+                                    name="dueDate"
+                                    type="date"
+                                    value={formData.dueDate}
+                                    onChange={handleChange}
+                                    fullWidth
+                                    required
+                                    disabled={loading}
+                                    InputLabelProps={{ shrink: true }}
+                                    sx={textFieldStyle}
+                                />
+                                <TextField
+                                    select
+                                    label="Assign To"
+                                    name="assigneeId"
+                                    value={formData.assigneeId}
+                                    onChange={handleChange}
+                                    fullWidth
+                                    disabled={loading}
+                                    sx={textFieldStyle}
+                                >
+                                    <MenuItem value="">Unassigned</MenuItem>
+                                    {projectMembers.map((member) => (
+                                        <MenuItem key={member.userId?._id || member.userId} value={member.userId?._id || member.userId}>
+                                            {member.userId?.fullName || member.userId?.email || 'Member'}
+                                        </MenuItem>
+                                    ))}
+                                </TextField>
+                                <TextField
+                                    select
+                                    label="Recurring Task"
+                                    name="recurrenceEnabled"
+                                    value={formData.recurrenceEnabled ? 'yes' : 'no'}
+                                    onChange={(e) => setFormData((prev) => ({
+                                        ...prev,
+                                        recurrenceEnabled: e.target.value === 'yes'
+                                    }))}
+                                    fullWidth
+                                    disabled={loading}
+                                    sx={textFieldStyle}
+                                >
+                                    <MenuItem value="no">No</MenuItem>
+                                    <MenuItem value="yes">Yes</MenuItem>
+                                </TextField>
+                                {formData.recurrenceEnabled && (
+                                    <TextField
+                                        select
+                                        label="Recurrence Frequency"
+                                        name="recurrenceFrequency"
+                                        value={formData.recurrenceFrequency}
+                                        onChange={handleChange}
+                                        fullWidth
+                                        disabled={loading}
+                                        sx={textFieldStyle}
+                                    >
+                                        <MenuItem value="daily">Daily</MenuItem>
+                                        <MenuItem value="weekly">Weekly</MenuItem>
+                                        <MenuItem value="monthly">Monthly</MenuItem>
+                                    </TextField>
+                                )}
+                                <Divider />
+                                <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>Notes</Typography>
+                                <TextField
+                                    label="Add note"
+                                    value={newNote}
+                                    onChange={(e) => setNewNote(e.target.value)}
+                                    fullWidth
+                                    multiline
+                                    rows={2}
+                                    disabled={loading || uploadLoading}
+                                    sx={textFieldStyle}
+                                />
+                                <Button
+                                    variant="outlined"
+                                    onClick={handleAddNote}
+                                    disabled={uploadLoading || !newNote.trim()}
+                                    sx={{ textTransform: 'none' }}
+                                >
+                                    {uploadLoading ? 'Saving...' : 'Add Note'}
+                                </Button>
+                                {notesList.length > 0 && (
+                                    <List dense sx={{ bgcolor: 'background.default', borderRadius: '8px' }}>
+                                        {notesList.slice().reverse().map((note, idx) => (
+                                            <ListItem key={`${note.createdAt}-${idx}`} sx={{ py: 0.5 }}>
+                                                <ListItemText
+                                                    primary={note.content}
+                                                    secondary={note.createdAt ? new Date(note.createdAt).toLocaleString() : ''}
+                                                />
+                                            </ListItem>
+                                        ))}
+                                    </List>
+                                )}
+                                <Divider />
+                                <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>Attachments</Typography>
+                                <Button
+                                    variant="outlined"
+                                    component="label"
+                                    disabled={loading || uploadLoading}
+                                    sx={{ textTransform: 'none' }}
+                                >
+                                    {selectedFile ? selectedFile.name : 'Choose File'}
+                                    <input
+                                        type="file"
+                                        hidden
+                                        onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
+                                    />
+                                </Button>
+                                <Button
+                                    variant="outlined"
+                                    onClick={handleAttachmentUpload}
+                                    disabled={!selectedFile || uploadLoading}
+                                    sx={{ textTransform: 'none' }}
+                                >
+                                    {uploadLoading ? 'Uploading...' : 'Upload Attachment'}
+                                </Button>
+                                {attachmentsList.length > 0 && (
+                                    <List dense sx={{ bgcolor: 'background.default', borderRadius: '8px' }}>
+                                        {attachmentsList.slice().reverse().map((file, idx) => (
+                                            <ListItem key={`${file.fileName}-${idx}`} sx={{ py: 0.5 }}>
+                                                <ListItemText
+                                                    primary={file.originalName}
+                                                    secondary={file.uploadedAt ? new Date(file.uploadedAt).toLocaleString() : ''}
+                                                />
+                                                <Button
+                                                    size="small"
+                                                    href={`${API_BASE_URL.replace('/api', '')}${file.filePath}`}
+                                                    target="_blank"
+                                                    rel="noreferrer"
+                                                >
+                                                    Open
+                                                </Button>
+                                            </ListItem>
+                                        ))}
+                                    </List>
+                                )}
+                                <Divider />
+                                <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>Comments</Typography>
+                                <TextField
+                                    label="Add comment"
+                                    value={newComment}
+                                    onChange={(e) => setNewComment(e.target.value)}
+                                    fullWidth
+                                    multiline
+                                    rows={2}
+                                    disabled={loading || uploadLoading}
+                                    sx={textFieldStyle}
+                                />
+                                <Button
+                                    variant="outlined"
+                                    onClick={handleAddComment}
+                                    disabled={uploadLoading || !newComment.trim()}
+                                    sx={{ textTransform: 'none' }}
+                                >
+                                    {uploadLoading ? 'Saving...' : 'Add Comment'}
+                                </Button>
+                                {commentsList.length > 0 && (
+                                    <List dense sx={{ bgcolor: 'background.default', borderRadius: '8px' }}>
+                                        {commentsList.slice().reverse().map((comment, idx) => (
+                                            <ListItem key={`${comment.createdAt}-${idx}`} sx={{ py: 0.5 }}>
+                                                <ListItemText
+                                                    primary={comment.text}
+                                                    secondary={comment.createdAt ? new Date(comment.createdAt).toLocaleString() : ''}
+                                                />
+                                            </ListItem>
+                                        ))}
+                                    </List>
+                                )}
+                                <Divider />
+                                <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>Activity Log</Typography>
+                                {activityList.length > 0 ? (
+                                    <List dense sx={{ bgcolor: 'background.default', borderRadius: '8px' }}>
+                                        {activityList.slice().reverse().map((item, idx) => (
+                                            <ListItem key={`${item.createdAt}-${idx}`} sx={{ py: 0.5 }}>
+                                                <ListItemText
+                                                    primary={`${item.action}${item.detail ? ` - ${item.detail}` : ''}`}
+                                                    secondary={item.createdAt ? new Date(item.createdAt).toLocaleString() : ''}
+                                                />
+                                            </ListItem>
+                                        ))}
+                                    </List>
+                                ) : (
+                                    <Typography variant="caption" color="text.secondary">No activity yet.</Typography>
+                                )}
                                 
                                 <Button
                                     type="submit"
@@ -187,7 +505,7 @@ const UpdateTask = ({ open, handleClose, taskData, onUpdateSuccess }) => {
                                         opacity: isChanged ? 1 : 0.6
                                     }}
                                 >
-                                    {loading ? <CircularProgress size={24} sx={{ color: '#fff' }} /> : 'Update Task'}
+                                    {loading ? <CustomLoader size={24} sx={{ color: '#fff' }} /> : 'Update Task'}
                                 </Button>
                             </Stack>
                         </form>

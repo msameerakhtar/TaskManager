@@ -1,12 +1,12 @@
-import React, { useState } from 'react';
-import axios from 'axios';
+import React, { useState, useCallback } from 'react';
+import { taskApi } from '../../api/taskApi';
 import { 
-    IconButton, CircularProgress, Snackbar, Alert, Tooltip, 
+    IconButton, Snackbar, Alert, Tooltip, 
     Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions, Button, useTheme 
 } from '@mui/material';
+import CustomLoader from '../../components/CustomLoader';
 import DeleteIcon from '@mui/icons-material/Delete';
 
-import API_BASE_URL from '../../config/api';
 import { useSelector } from 'react-redux';
 
 const DeleteTask = ({ taskId, onDeleteSuccess }) => {
@@ -18,21 +18,19 @@ const DeleteTask = ({ taskId, onDeleteSuccess }) => {
     const [openDialog, setOpenDialog] = useState(false);
     const [feedback, setFeedback] = useState({ open: false, message: '', severity: 'success' });
 
-    const handleOpenDialog = () => setOpenDialog(true);
-    const handleCloseDialog = () => setOpenDialog(false);
+    const handleOpenDialog = useCallback(() => setOpenDialog(true), []);
+    const handleCloseDialog = useCallback(() => setOpenDialog(false), []);
 
-    const handleCloseFeedback = () => setFeedback({ ...feedback, open: false });
+    const handleCloseFeedback = useCallback(() => setFeedback(prev => ({ ...prev, open: false })), []);
 
-    const handleDelete = async () => {
+    const handleDelete = useCallback(async () => {
         if (!taskId) return;
         
         handleCloseDialog();
         setLoading(true);
         
         try {
-            await axios.delete(`${API_BASE_URL}/tasks/${taskId}`, {
-                headers: { 'x-auth-token': token }
-            });
+            await taskApi.deleteTask(taskId);
             setFeedback({
                 open: true,
                 message: "Task deleted successfully!",
@@ -50,7 +48,7 @@ const DeleteTask = ({ taskId, onDeleteSuccess }) => {
         } finally {
             setLoading(false);
         }
-    };
+    }, [taskId, token, onDeleteSuccess, handleCloseDialog]);
 
     return (
         <>
@@ -68,7 +66,7 @@ const DeleteTask = ({ taskId, onDeleteSuccess }) => {
                         '&.Mui-disabled': { color: 'error.main' + '4D' }
                     }}
                 >
-                    {loading ? <CircularProgress size={20} sx={{ color: 'error.main' }} /> : <DeleteIcon fontSize="small" />}
+                    {loading ? <CustomLoader size={20} sx={{ color: 'error.main' }} /> : <DeleteIcon fontSize="small" />}
                 </IconButton>
             </Tooltip>
 
