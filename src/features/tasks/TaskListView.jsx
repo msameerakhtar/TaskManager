@@ -6,6 +6,8 @@ import {
 import EditIcon from '@mui/icons-material/Edit';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import LibraryAddCheckIcon from '@mui/icons-material/LibraryAddCheck';
+import LockIcon from '@mui/icons-material/Lock';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import CustomLoader from '../../components/CustomLoader';
 import DeleteTask from './DeleteTask';
@@ -66,6 +68,7 @@ const ListRow = React.memo(({
   const priorityCfg = PRIORITY_CONFIG[task.priority] || PRIORITY_CONFIG.medium;
   const now = new Date();
   const overdue = task.status !== 'done' && task.dueDate && new Date(task.dueDate) < now;
+  const isBlocked = task.blockedBy && task.blockedBy.some(t => t.status !== 'done');
 
   return (
     <>
@@ -120,8 +123,39 @@ const ListRow = React.memo(({
 
         {/* Chips row */}
         <Stack direction="row" spacing={0.5} alignItems="center" sx={{ flexShrink: 0 }}>
+          {task.labels && task.labels.length > 0 && task.labels.map((label, idx) => (
+            <Chip 
+              key={idx} 
+              size="small" 
+              label={label.text} 
+              sx={{ 
+                height: 18, 
+                fontSize: '0.6rem', 
+                fontWeight: 700, 
+                bgcolor: label.color + '1A', 
+                color: label.color,
+                border: `1px solid ${label.color}40`
+              }} 
+            />
+          ))}
           {overdue && <Chip label="Overdue" size="small" color="error" sx={{ height: 18, fontSize: '0.6rem', fontWeight: 700 }} />}
           {task.approvalStatus === 'pending' && <Chip label="Pending" size="small" color="warning" sx={{ height: 18, fontSize: '0.6rem' }} />}
+          {isBlocked && <Chip size="small" icon={<LockIcon sx={{ fontSize: '12px !important', ml: '4px' }} />} label="Blocked" color="error" variant="outlined" sx={{ height: 18, fontSize: '0.6rem', fontWeight: 700, '& .MuiChip-icon': { color: 'inherit' } }} />}
+          {task.subtasks && task.subtasks.length > 0 && (
+            <Chip 
+              size="small" 
+              icon={<LibraryAddCheckIcon sx={{ fontSize: '12px !important', ml: '4px' }} />} 
+              label={`${task.subtasks.filter(s => s.isCompleted).length}/${task.subtasks.length}`} 
+              sx={{ 
+                height: 18, 
+                fontSize: '0.6rem', 
+                fontWeight: 700, 
+                bgcolor: task.subtasks.every(s => s.isCompleted) ? 'success.main' : 'action.selected', 
+                color: task.subtasks.every(s => s.isCompleted) ? 'white' : 'text.primary',
+                '& .MuiChip-icon': { color: 'inherit' }
+              }} 
+            />
+          )}
           <Chip
             label={priorityCfg.label}
             color={priorityCfg.color}

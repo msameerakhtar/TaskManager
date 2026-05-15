@@ -12,6 +12,7 @@ const jwt = require('jsonwebtoken');
 const { Server } = require('socket.io');
 const { startReminderScheduler } = require('./services/reminderScheduler');
 const Project = require('./models/Project');
+const User = require('./models/User');
 
 dotenv.config();
 
@@ -68,6 +69,7 @@ const projectRoutes = require('./routes/projects');
 const insightsRoutes = require('./routes/insights');
 const calendarRoutes = require('./routes/calendar');
 const enterpriseRoutes = require('./routes/enterprise');
+const adminRoutes = require('./routes/admin');
 
 // Route Middlewares
 app.use('/api/auth', authRoutes);
@@ -78,6 +80,7 @@ app.use('/api/projects', projectRoutes);
 app.use('/api/insights', insightsRoutes);
 app.use('/api/calendar', calendarRoutes);
 app.use('/api/enterprise', enterpriseRoutes);
+app.use('/api/admin', adminRoutes);
 app.use('/uploads', express.static(uploadsDir));
 
 app.get('/', (req, res) => {
@@ -100,6 +103,9 @@ io.use((socket, next) => {
 
 io.on('connection', (socket) => {
     socket.join(`user:${socket.user.id}`);
+    if (socket.user.systemRole === 'superadmin') {
+        socket.join('room:superadmin');
+    }
     socket.joinedProjects = new Set();
 
     socket.on('project:join', async ({ projectId }) => {
@@ -154,9 +160,28 @@ mongoose.connect(process.env.MONGODB_URI, {
     serverSelectionTimeoutMS: 5000,
     socketTimeoutMS: 45000
 })
-    .then(() => {
+    .then(async () => {
         console.log('✅ MongoDB Connected Successfully to local/cloud instance');
         startReminderScheduler();
+        
+        // Ensure Super Admin exists
+        try {
+            const adminEmail = process.env.SUPERADMIN_EMAIL || 'admin@taskmanager.com';
+            const adminPassword = process.env.SUPERADMIN_PASSWORD || 'admin123';
+            const existingAdmin = await User.findOne({ email: adminEmail });
+            if (!existingAdmin) {
+                const superAdmin = new User({
+                    fullName: 'Super Admin',
+                    email: adminEmail,
+                    password: adminPassword,
+                    systemRole: 'superadmin'
+                });
+                await superAdmin.save();
+                console.log(`✅ Super Admin created: ${adminEmail}`);
+            }
+        } catch (e) {
+            console.error('❌ Failed to create default Super Admin:', e.message);
+        }
     })
     .catch(err => console.error('❌ MongoDB Connection Error:', err.message));
 

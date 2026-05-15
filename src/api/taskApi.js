@@ -29,4 +29,13 @@ export const taskApi = {
 
   suggestPriority: (payload) =>
     api.post('/tasks/suggest/priority', payload),
+
+  addSubtask: (taskId, title) =>
+    api.post(`/tasks/${taskId}/subtasks`, { title }),
+
+  updateSubtask: (taskId, subtaskId, payload) =>
+    api.put(`/tasks/${taskId}/subtasks/${subtaskId}`, payload),
+
+  deleteSubtask: (taskId, subtaskId) =>
+    api.delete(`/tasks/${taskId}/subtasks/${subtaskId}`),
 };

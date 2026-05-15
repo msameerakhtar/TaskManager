@@ -21,14 +21,20 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// ── Response Interceptor ─ handle 401 (session expired) ───────────
+// ── Response Interceptor ─ handle 401/403 (session expired or suspended) ───────────
 api.interceptors.response.use(
   (response) => response,
   (error) => {
+    const isUnauthorized = error.response?.status === 401;
+    const isSuspended = error.response?.status === 403 && error.response?.data?.message?.includes('suspended');
+    
     if (
-      error.response?.status === 401 &&
+      (isUnauthorized || isSuspended) &&
       !error.config?._skipAuthRedirect
     ) {
+      if (isSuspended) {
+          alert('Your account has been suspended by the administrator. Please contact support.');
+      }
       store.dispatch(logout());
       window.location.href = '/login';
     }

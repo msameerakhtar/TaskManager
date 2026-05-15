@@ -11,6 +11,7 @@ const authSlice = createSlice({
     user: savedUser || null,
     token: savedToken || null,
     isAuthenticated: !!savedToken, 
+    currentRole: null,
   },
   reducers: {
     login: (state, action) => {
@@ -28,6 +29,7 @@ const authSlice = createSlice({
       state.user = null;
       state.token = null;
       state.isAuthenticated = false;
+      state.currentRole = null;
 
      
       localStorage.removeItem('user');
@@ -40,8 +42,11 @@ const authSlice = createSlice({
       state.user = { ...state.user, ...action.payload };
       localStorage.setItem('user', JSON.stringify(state.user));
     },
+    setCurrentRole: (state, action) => {
+      state.currentRole = action.payload;
+    },
   },
 });
 
-export const { login, logout, updateUser } = authSlice.actions;
+export const { login, logout, updateUser, setCurrentRole } = authSlice.actions;
 export default authSlice.reducer;

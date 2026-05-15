@@ -60,6 +60,14 @@ const taskSchema = new mongoose.Schema({
             default: undefined
         }
     },
+    blockedBy: [{
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Task'
+    }],
+    labels: [{
+        text: { type: String, required: true },
+        color: { type: String, default: '#e0e0e0' }
+    }],
     notes: [{
         content: {
             type: String,
@@ -81,6 +89,21 @@ const taskSchema = new mongoose.Schema({
             type: String,
             required: true,
             trim: true
+        },
+        createdAt: {
+            type: Date,
+            default: Date.now
+        }
+    }],
+    subtasks: [{
+        title: {
+            type: String,
+            required: true,
+            trim: true
+        },
+        isCompleted: {
+            type: Boolean,
+            default: false
         },
         createdAt: {
             type: Date,
@@ -126,6 +149,11 @@ const taskSchema = new mongoose.Schema({
     approvalStatus: {
         type: String,
         enum: ['none', 'pending', 'approved', 'rejected'],
+        default: 'none'
+    },
+    deletionStatus: {
+        type: String,
+        enum: ['none', 'pending', 'rejected'],
         default: 'none'
     },
     slaBreachedAt: {

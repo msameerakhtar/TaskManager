@@ -7,6 +7,7 @@ import AddIcon from '@mui/icons-material/Add';
 import ViewKanbanIcon from '@mui/icons-material/ViewKanban';
 import TableRowsIcon from '@mui/icons-material/TableRows';
 import ViewListIcon from '@mui/icons-material/ViewList';
+import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
 import CreateTask from './CreateTask';
 import SearchBar from './SearchBar'; 
 import UpdateTask from './UpdateTask';
@@ -15,16 +16,18 @@ import InsightsPanel from './InsightsPanel';
 import TaskCard from './TaskCard';
 import TaskTableView from './TaskTableView';
 import TaskListView from './TaskListView';
+import TaskCalendarView from './TaskCalendarView';
 import useTaskSocket from './hooks/useTaskSocket';
 import { useDispatch, useSelector } from 'react-redux';
 import { useLocation } from 'react-router-dom';
 import { setTasks, setLoading as setReduxLoading } from '../../features/tasks/tasksSlice';
+import { setCurrentRole } from '../../features/auth/authSlice';
 import { taskApi } from '../../api/taskApi';
 import { projectApi } from '../../api/projectApi';
 import { notificationApi } from '../../api/notificationApi';
 import { insightsApi } from '../../api/insightsApi';
 
-const VIEWS = ['kanban', 'table', 'list'];
+const VIEWS = ['kanban', 'table', 'list', 'calendar'];
 const VIEW_STORAGE_KEY = 'tm_task_view';
 
 const TaskList = () => {
@@ -35,7 +38,10 @@ const TaskList = () => {
   const tasks = useSelector((state) => state.tasks.items);
   const loading = useSelector((state) => state.tasks.loading);
   const token = useSelector((state) => state.auth.token);
-  const currentUserId = useSelector((state) => state.auth.user?.id || state.auth.user?._id);
+  const user = useSelector((state) => state.auth.user);
+  const currentUserId = user?.id || user?._id;
+  const currentRole = useSelector((state) => state.auth.currentRole);
+  const isAdmin = currentRole === 'admin' || user?.systemRole === 'superadmin';
 
   const [viewMode, setViewMode] = useState(() => {
     const saved = localStorage.getItem(VIEW_STORAGE_KEY);
@@ -129,6 +135,20 @@ const TaskList = () => {
       console.error('Project fetch error:', error);
     }
   }, [location.search, selectedProjectId]);
+
+  useEffect(() => {
+    if (selectedProjectId && projects.length > 0) {
+      const p = projects.find(p => p._id === selectedProjectId);
+      if (p && currentUserId) {
+        const mem = p.members.find(m => String(m.userId?._id || m.userId) === String(currentUserId));
+        if (mem) {
+          dispatch(setCurrentRole(mem.role));
+        } else if (user?.systemRole === 'superadmin') {
+          dispatch(setCurrentRole('admin'));
+        }
+      }
+    }
+  }, [selectedProjectId, projects, currentUserId, dispatch]);
 
   const fetchNotifications = useCallback(async () => {
     try {
@@ -321,7 +341,7 @@ const TaskList = () => {
       setFilteredTasks(previousFilteredTasks);
       setFeedback({
         open: true,
-        message: 'Task move failed. Changes reverted.',
+        message: error.response?.data?.message || 'Task move failed. Changes reverted.',
         severity: 'error'
       });
       console.error('Failed to update status:', error);
@@ -374,12 +394,18 @@ const TaskList = () => {
 
   const kpis = useMemo(() => {
     const now = new Date();
-    const total = tasks.length;
-    const pending = tasks.filter((task) => task.status !== 'done').length;
-    const completed = tasks.filter((task) => task.status === 'done').length;
-    const overdue = tasks.filter((task) => task.status !== 'done' && task.dueDate && new Date(task.dueDate) < now).length;
+    // For regular members, only count tasks assigned to them. For admins/superadmins, count everything.
+    const relevantTasks = isAdmin 
+      ? tasks 
+      : tasks.filter(t => String(t.assigneeId?._id || t.assigneeId) === String(currentUserId));
+
+    const total = relevantTasks.length;
+    const pending = relevantTasks.filter((task) => task.status !== 'done').length;
+    const completed = relevantTasks.filter((task) => task.status === 'done').length;
+    const overdue = relevantTasks.filter((task) => task.status !== 'done' && task.dueDate && new Date(task.dueDate) < now).length;
+    
     return { total, pending, completed, overdue };
-  }, [tasks]);
+  }, [tasks, isAdmin, currentUserId]);
 
   const selectedProject = useMemo(
     () => projects.find((project) => project._id === selectedProjectId) || null,
@@ -394,7 +420,7 @@ const TaskList = () => {
     return member?.role || null;
   }, [selectedProject, currentUserId]);
 
-  const isAdmin = currentUserRole === 'admin';
+  const isLocalAdmin = currentUserRole === 'admin';
 
   // ─── Workspace Actions ────────────────────────────────────
 
@@ -490,6 +516,11 @@ const TaskList = () => {
                   <ViewListIcon fontSize="small" />
                 </ToggleButton>
               </Tooltip>
+              <Tooltip title="Calendar View">
+                <ToggleButton value="calendar">
+                  <CalendarMonthIcon fontSize="small" />
+                </ToggleButton>
+              </Tooltip>
             </ToggleButtonGroup>
 
             <Button
@@ -560,6 +591,7 @@ const TaskList = () => {
           workloadError={workloadError}
           selectedProject={selectedProject}
           isDark={isDark}
+          isAdmin={isAdmin}
         />
 
         {notifications.filter((n) => !n.isRead).slice(0, 3).map((notification) => (
@@ -574,6 +606,7 @@ const TaskList = () => {
             {viewMode === 'kanban' && '💡 Tip: Click a task card, then press ← / → arrow keys to move it between columns quickly (or drag cards).'}
             {viewMode === 'table'  && '💡 Tip: Click any column header to sort tasks. Use the action buttons on the right to edit, complete or delete.'}
             {viewMode === 'list'   && '💡 Tip: Click a group header to collapse/expand that section. Priority is shown as a colored dot on the left.'}
+            {viewMode === 'calendar' && '💡 Tip: View your tasks on a calendar. Click any event to edit or update its details.'}
           </Typography>
         </Paper>
 
@@ -668,6 +701,13 @@ const TaskList = () => {
           />
         )}
 
+        {viewMode === 'calendar' && (
+          <TaskCalendarView
+            tasks={filteredTasks}
+            onEditClick={handleEditClick}
+          />
+        )}
+
 
         <CreateTask
           open={openModal}
@@ -675,6 +715,7 @@ const TaskList = () => {
           refreshTasks={fetchTasks}
           selectedProjectId={selectedProjectId}
           projectMembers={selectedProject?.members || []}
+          allTasks={tasks}
         />
         {selectedTask && (
           <UpdateTask
@@ -683,6 +724,7 @@ const TaskList = () => {
             taskData={selectedTask}
             onUpdateSuccess={fetchTasks}
             projectMembers={selectedProject?.members || []}
+            allTasks={tasks}
           />
         )}
         <Snackbar

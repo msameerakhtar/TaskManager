@@ -94,6 +94,7 @@ const emitProjectTaskEvent = (req, projectId, action, task) => {
         projectId: projectId.toString(),
         taskId: task?._id?.toString() || task?.id || null
     });
+    io.to('room:superadmin').emit('task:changed'); // Global event for Super Admin charts
 };
 
 const normalizeStatus = (status) => {
@@ -226,6 +227,50 @@ const validateTaskPayload = async (payload, userId, isUpdate = false) => {
         }
     }
 
+    if (!isUpdate || payload.subtasks !== undefined) {
+        if (payload.subtasks === undefined) {
+            // no-op
+        } else if (!Array.isArray(payload.subtasks)) {
+            errors.push('Subtasks must be an array.');
+        } else {
+            const sanitizedSubtasks = payload.subtasks
+                .map((st) => ({
+                    title: typeof st.title === 'string' ? st.title.trim() : '',
+                    isCompleted: !!st.isCompleted,
+                    createdAt: st.createdAt ? new Date(st.createdAt) : new Date(),
+                    _id: st._id || undefined
+                }))
+                .filter((st) => st.title);
+            taskData.subtasks = sanitizedSubtasks;
+        }
+    }
+
+    if (!isUpdate || payload.blockedBy !== undefined) {
+        if (payload.blockedBy === undefined) {
+            // no-op
+        } else if (!Array.isArray(payload.blockedBy)) {
+            errors.push('BlockedBy must be an array of task IDs.');
+        } else {
+            taskData.blockedBy = payload.blockedBy;
+        }
+    }
+
+    if (!isUpdate || payload.labels !== undefined) {
+        if (payload.labels === undefined) {
+            // no-op
+        } else if (!Array.isArray(payload.labels)) {
+            errors.push('Labels must be an array.');
+        } else {
+            const sanitizedLabels = payload.labels
+                .map(lbl => ({
+                    text: typeof lbl.text === 'string' ? lbl.text.trim() : '',
+                    color: typeof lbl.color === 'string' ? lbl.color.trim() : '#e0e0e0'
+                }))
+                .filter(lbl => lbl.text);
+            taskData.labels = sanitizedLabels;
+        }
+    }
+
     return { errors, taskData };
 };
 
@@ -252,6 +297,7 @@ router.get('/', async (req, res) => {
             .populate('assigneeId', 'fullName email')
             .populate('comments.userId', 'fullName email')
             .populate('activityLog.actorId', 'fullName email')
+            .populate('blockedBy', 'title status')
             .lean();
         res.json(tasks);
     } catch (err) {
@@ -331,6 +377,22 @@ router.put('/:id', async (req, res) => {
         const previousStatus = task.status;
         const wantsDone = taskData.status === 'done' && previousStatus !== 'done';
         const requireApproval = !!(project.enterprise && project.enterprise.requireApprovalForCompletion);
+        
+        // Prevent marking as done if there are incomplete dependencies
+        if (wantsDone && task.blockedBy && task.blockedBy.length > 0) {
+            const incompleteDependencies = await Task.find({
+                _id: { $in: task.blockedBy },
+                status: { $ne: 'done' }
+            }).select('title').lean();
+            
+            if (incompleteDependencies.length > 0) {
+                const depNames = incompleteDependencies.map(t => `"${t.title}"`).join(', ');
+                return res.status(400).json({ 
+                    message: `Cannot mark as done. This task is blocked by: ${depNames}. Please complete them first.` 
+                });
+            }
+        }
+
         if (wantsDone && requireApproval) {
             delete taskData.status;
         }
@@ -470,8 +532,54 @@ router.delete('/:id', async (req, res) => {
         if (!project || !role) {
             return res.status(403).json({ message: 'Not authorized' });
         }
-        if (role !== 'admin' && task.userId.toString() !== req.user.id) {
+        const requireApproval = project.enterprise?.requireApprovalForCompletion && role !== 'admin';
+
+        if (role !== 'admin' && task.userId.toString() !== req.user.id && !requireApproval) {
             return res.status(403).json({ message: 'Only admins or task creators can delete this task.' });
+        }
+
+        if (requireApproval) {
+            task.deletionStatus = 'pending';
+            task.activityLog.push({
+                actorId: req.user.id,
+                action: 'deletion_requested',
+                detail: 'Deletion pending admin approval'
+            });
+            await task.save();
+
+            const ApprovalRequest = require('../models/ApprovalRequest');
+            await ApprovalRequest.create({
+                projectId: project._id,
+                taskId: task._id,
+                requestedBy: req.user.id,
+                type: 'deletion',
+                status: 'pending'
+            });
+
+            const Notification = require('../models/Notification');
+            const adminMembers = project.members.filter((m) => m.role === 'admin');
+            for (const m of adminMembers) {
+                await Notification.create({
+                    userId: m.userId,
+                    taskId: task._id,
+                    type: 'approval_request',
+                    title: 'Approval required',
+                    message: `Task "${task.title}" needs approval to be deleted.`
+                });
+            }
+
+            await logAudit({
+                actorId: req.user.id,
+                projectId: task.projectId,
+                entityType: 'approval',
+                entityId: task._id,
+                action: 'requested',
+                meta: { title: task.title, type: 'deletion' },
+                ip: req.ip
+            });
+
+            emitProjectTaskEvent(req, task.projectId, 'updated', task);
+            return res.json({ requiresApproval: true, message: 'Deletion sent for admin approval. Task stays active until approved.' });
         }
 
         await Task.findByIdAndDelete(req.params.id);
@@ -651,6 +759,104 @@ router.post('/suggest/priority', async (req, res) => {
         res.json({ priority, currentLoad });
     } catch (error) {
         console.error(error.message);
+        res.status(500).send('Server Error');
+    }
+});
+
+// @route   POST api/tasks/:id/subtasks
+// @desc    Add a subtask to a task
+router.post('/:id/subtasks', async (req, res) => {
+    const { title } = req.body;
+    if (!title || !title.trim()) {
+        return res.status(400).json({ message: 'Subtask title is required.' });
+    }
+
+    try {
+        const task = await Task.findById(req.params.id);
+        if (!task) return res.status(404).json({ message: 'Task not found' });
+        const project = await Project.findById(task.projectId);
+        if (!project || !isProjectMember(project, req.user.id)) {
+            return res.status(403).json({ message: 'Not authorized' });
+        }
+
+        task.subtasks.push({ title: title.trim(), isCompleted: false });
+        task.activityLog.push({
+            actorId: req.user.id,
+            action: 'subtask_added',
+            detail: `Added subtask: ${title.trim()}`
+        });
+        await task.save();
+        emitProjectTaskEvent(req, task.projectId, 'updated', task);
+        res.status(201).json(task);
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).send('Server Error');
+    }
+});
+
+// @route   PUT api/tasks/:id/subtasks/:subtaskId
+// @desc    Update a subtask (toggle completion or edit title)
+router.put('/:id/subtasks/:subtaskId', async (req, res) => {
+    try {
+        const task = await Task.findById(req.params.id);
+        if (!task) return res.status(404).json({ message: 'Task not found' });
+        const project = await Project.findById(task.projectId);
+        if (!project || !isProjectMember(project, req.user.id)) {
+            return res.status(403).json({ message: 'Not authorized' });
+        }
+
+        const subtask = task.subtasks.id(req.params.subtaskId);
+        if (!subtask) return res.status(404).json({ message: 'Subtask not found' });
+
+        if (req.body.title !== undefined) {
+            subtask.title = req.body.title.trim();
+        }
+        if (req.body.isCompleted !== undefined) {
+            const wasCompleted = subtask.isCompleted;
+            subtask.isCompleted = req.body.isCompleted;
+            if (wasCompleted !== req.body.isCompleted) {
+                task.activityLog.push({
+                    actorId: req.user.id,
+                    action: req.body.isCompleted ? 'subtask_completed' : 'subtask_uncompleted',
+                    detail: `${req.body.isCompleted ? 'Completed' : 'Uncompleted'} subtask: ${subtask.title}`
+                });
+            }
+        }
+        await task.save();
+        emitProjectTaskEvent(req, task.projectId, 'updated', task);
+        res.json(task);
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).send('Server Error');
+    }
+});
+
+// @route   DELETE api/tasks/:id/subtasks/:subtaskId
+// @desc    Delete a subtask
+router.delete('/:id/subtasks/:subtaskId', async (req, res) => {
+    try {
+        const task = await Task.findById(req.params.id);
+        if (!task) return res.status(404).json({ message: 'Task not found' });
+        const project = await Project.findById(task.projectId);
+        if (!project || !isProjectMember(project, req.user.id)) {
+            return res.status(403).json({ message: 'Not authorized' });
+        }
+
+        const subtask = task.subtasks.id(req.params.subtaskId);
+        if (!subtask) return res.status(404).json({ message: 'Subtask not found' });
+
+        const title = subtask.title;
+        task.subtasks.pull(req.params.subtaskId);
+        task.activityLog.push({
+            actorId: req.user.id,
+            action: 'subtask_deleted',
+            detail: `Deleted subtask: ${title}`
+        });
+        await task.save();
+        emitProjectTaskEvent(req, task.projectId, 'updated', task);
+        res.json(task);
+    } catch (err) {
+        console.error(err.message);
         res.status(500).send('Server Error');
     }
 });

@@ -22,6 +22,11 @@ const approvalRequestSchema = new mongoose.Schema({
         enum: ['pending', 'approved', 'rejected'],
         default: 'pending'
     },
+    type: {
+        type: String,
+        enum: ['completion', 'deletion'],
+        default: 'completion'
+    },
     comment: {
         type: String,
         default: ''

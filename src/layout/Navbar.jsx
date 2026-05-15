@@ -45,16 +45,35 @@ const Navbar = ({ mode, toggleTheme }) => {
 
     const isHomePage = location.pathname === '/';
     
+    const currentRole = useSelector((state) => state.auth.currentRole);
+    
     const fullName = useMemo(() => user?.fullName || user?.email?.split('@')[0] || "User", [user]);
     const avatarUrl = useMemo(() => user?.avatarUrl, [user]);
 
-    const navItems = useMemo(() => [
-        { label: 'Home', path: '/tasks' },
-        { label: 'Enterprise', path: '/enterprise' },
-        { label: 'Profile', path: '/profile' },
-        { label: 'Contact Us', path: '/contact' },
-        { label: 'Blog', path: '/blog' },
-    ], []);
+    const navItems = useMemo(() => {
+        const items = [
+            { label: 'Home', path: '/tasks' }
+        ];
+
+        // 1. If Super Admin: Only show Super Admin Dashboard (Hide others)
+        if (user?.systemRole === 'superadmin') {
+            items.push({ label: 'Super Admin', path: '/superadmin' });
+        } 
+        // 2. If Normal User: Show Dashboard based on Current Workspace Role
+        else {
+            if (currentRole === 'admin') {
+                items.push({ label: 'Admin Dashboard', path: '/admin-dashboard' });
+                items.push({ label: 'Enterprise', path: '/enterprise' });
+            } else if (currentRole === 'member') {
+                items.push({ label: 'My Dashboard', path: '/member-dashboard' });
+            }
+        }
+
+        items.push({ label: 'Profile', path: '/profile' });
+        items.push({ label: 'Contact Us', path: '/contact' });
+        items.push({ label: 'Blog', path: '/blog' });
+        return items;
+    }, [currentRole, user?.systemRole]);
 
     const handleLogoutClick = useCallback(() => {
         setAnchorEl(null);

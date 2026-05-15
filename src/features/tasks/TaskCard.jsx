@@ -4,6 +4,8 @@ import {
 } from '@mui/material';
 import EditIcon from '@mui/icons-material/Edit';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
+import LibraryAddCheckIcon from '@mui/icons-material/LibraryAddCheck';
+import LockIcon from '@mui/icons-material/Lock';
 import CustomLoader from '../../components/CustomLoader';
 import DeleteTask from './DeleteTask';
 
@@ -30,6 +32,7 @@ const TaskCard = React.memo(({
   isDark
 }) => {
   const theme = useTheme();
+  const isBlocked = task.blockedBy && task.blockedBy.some(t => t.status !== 'done');
 
   return (
     <Card
@@ -86,10 +89,41 @@ const TaskCard = React.memo(({
 
         <Box sx={{ display: 'flex', gap: 1, mb: 2, flexWrap: 'wrap' }}>
           <Chip size="small" label={task.priority?.toUpperCase() || 'MEDIUM'} sx={{ fontSize: '0.65rem', fontWeight: 800, letterSpacing: 0.5, color: priorityColorMap[task.priority] ? `${priorityColorMap[task.priority]}.main` : 'text.primary', bgcolor: priorityColorMap[task.priority] ? `${priorityColorMap[task.priority]}.main` + '1A' : 'action.selected' }} />
+          {task.labels && task.labels.length > 0 && task.labels.map((label, idx) => (
+            <Chip 
+              key={idx} 
+              size="small" 
+              label={label.text} 
+              sx={{ 
+                fontSize: '0.65rem', 
+                fontWeight: 700, 
+                bgcolor: label.color + '1A', 
+                color: label.color,
+                border: `1px solid ${label.color}40`
+              }} 
+            />
+          ))}
           {task.dueDate && <Chip size="small" label={new Date(task.dueDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} sx={{ fontSize: '0.65rem', fontWeight: 600, bgcolor: 'action.hover' }} />}
           {task.approvalStatus === 'pending' && <Chip size="small" color="warning" label="Approval pending" sx={{ fontSize: '0.65rem', fontWeight: 600 }} />}
           {task.approvalStatus === 'rejected' && <Chip size="small" color="error" label="Rejected" sx={{ fontSize: '0.65rem', fontWeight: 600 }} />}
+          {task.deletionStatus === 'pending' && <Chip size="small" color="error" label="Deletion pending" sx={{ fontSize: '0.65rem', fontWeight: 600 }} />}
+          {task.deletionStatus === 'rejected' && <Chip size="small" color="error" label="Del Rejected" sx={{ fontSize: '0.65rem', fontWeight: 600 }} />}
           {task.escalationLevel > 0 && <Chip size="small" color="error" variant="outlined" label={`SLA L${task.escalationLevel}`} sx={{ fontSize: '0.65rem', fontWeight: 600 }} />}
+          {isBlocked && <Chip size="small" icon={<LockIcon sx={{ fontSize: '14px !important', ml: '4px' }} />} label="Blocked" color="error" variant="outlined" sx={{ fontSize: '0.65rem', fontWeight: 700, '& .MuiChip-icon': { color: 'inherit' } }} />}
+          {task.subtasks && task.subtasks.length > 0 && (
+            <Chip 
+              size="small" 
+              icon={<LibraryAddCheckIcon sx={{ fontSize: '14px !important' }} />} 
+              label={`${task.subtasks.filter(s => s.isCompleted).length}/${task.subtasks.length}`} 
+              sx={{ 
+                  fontSize: '0.65rem', 
+                  fontWeight: 800, 
+                  bgcolor: task.subtasks.every(s => s.isCompleted) ? 'success.main' : 'action.selected', 
+                  color: task.subtasks.every(s => s.isCompleted) ? 'white' : 'text.primary',
+                  '& .MuiChip-icon': { color: 'inherit' }
+              }} 
+            />
+          )}
         </Box>
 
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', pt: 1.5, borderTop: '1px solid', borderColor: 'divider' }}>
@@ -114,6 +148,10 @@ const TaskCard = React.memo(({
             </IconButton>
             {movingTaskId === task.id ? (
               <IconButton size="small" disabled><CustomLoader size={16} /></IconButton>
+            ) : task.deletionStatus === 'pending' ? (
+              <Tooltip title="Deletion pending admin approval">
+                <IconButton size="small" disabled><DeleteIcon sx={{ fontSize: 18 }} /></IconButton>
+              </Tooltip>
             ) : (
               <DeleteTask taskId={task.id} onDeleteSuccess={onDeleteSuccess} />
             )}

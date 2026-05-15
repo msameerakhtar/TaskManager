@@ -1,14 +1,30 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { 
     Modal, Box, Typography, TextField, Button, 
-    Stack, MenuItem, Snackbar, Alert, Backdrop, Fade, useTheme, Divider, List, ListItem, ListItemText
+    Stack, MenuItem, Snackbar, Alert, Backdrop, Fade, useTheme, Divider, List, ListItem, ListItemText, Checkbox, IconButton, LinearProgress, Autocomplete, Chip
 } from '@mui/material';
+import { createFilterOptions } from '@mui/material/Autocomplete';
+import DeleteIcon from '@mui/icons-material/Delete';
 import CustomLoader from '../../components/CustomLoader';
 import { taskApi } from '../../api/taskApi';
 import { API_BASE_URL } from '../../api/axiosInstance';
 import { useSelector } from 'react-redux';
 
-const UpdateTask = ({ open, handleClose, taskData, onUpdateSuccess, projectMembers = [] }) => {
+const filter = createFilterOptions();
+
+const LABEL_OPTIONS = [
+    { text: 'Bug', color: '#ef4444' },
+    { text: 'Feature', color: '#3b82f6' },
+    { text: 'Design', color: '#ec4899' },
+    { text: 'Marketing', color: '#f59e0b' },
+    { text: 'Urgent', color: '#dc2626' },
+    { text: 'Backend', color: '#10b981' },
+    { text: 'Frontend', color: '#06b6d4' }
+];
+const PRESET_COLORS = ['#ef4444', '#3b82f6', '#ec4899', '#f59e0b', '#10b981', '#06b6d4', '#8b5cf6', '#6366f1'];
+const getRandomColor = () => PRESET_COLORS[Math.floor(Math.random() * PRESET_COLORS.length)];
+
+const UpdateTask = ({ open, handleClose, taskData, onUpdateSuccess, projectMembers = [], allTasks = [] }) => {
     const theme = useTheme();
     const isDark = theme.palette.mode === 'dark';
     const token = useSelector((state) => state.auth.token);
@@ -33,6 +49,10 @@ const UpdateTask = ({ open, handleClose, taskData, onUpdateSuccess, projectMembe
     const [commentsList, setCommentsList] = useState([]);
     const [activityList, setActivityList] = useState([]);
     const [newComment, setNewComment] = useState('');
+    const [subtaskList, setSubtaskList] = useState([]);
+    const [newSubtaskTitle, setNewSubtaskTitle] = useState('');
+    const [blockedBy, setBlockedBy] = useState([]);
+    const [selectedLabels, setSelectedLabels] = useState([]);
 
     useEffect(() => {
         if (taskData && open) {
@@ -40,6 +60,9 @@ const UpdateTask = ({ open, handleClose, taskData, onUpdateSuccess, projectMembe
             setAttachmentsList(Array.isArray(taskData.attachments) ? taskData.attachments : []);
             setCommentsList(Array.isArray(taskData.comments) ? taskData.comments : []);
             setActivityList(Array.isArray(taskData.activityLog) ? taskData.activityLog : []);
+            setSubtaskList(Array.isArray(taskData.subtasks) ? taskData.subtasks : []);
+            setBlockedBy(Array.isArray(taskData.blockedBy) ? taskData.blockedBy : []);
+            setSelectedLabels(Array.isArray(taskData.labels) ? taskData.labels : []);
             setFormData({
                 title: taskData.title || taskData.task || '',
                 description: taskData.description || '',
@@ -98,8 +121,10 @@ const UpdateTask = ({ open, handleClose, taskData, onUpdateSuccess, projectMembe
         formData.dueDate !== (taskData.dueDate ? new Date(taskData.dueDate).toISOString().split('T')[0] : '') ||
         formData.recurrenceEnabled !== Boolean(taskData.recurrence?.enabled) ||
         formData.recurrenceFrequency !== (taskData.recurrence?.frequency || 'daily') ||
-        formData.assigneeId !== (taskData.assigneeId?._id || taskData.assigneeId || '')
-    , [formData, taskData]);
+        formData.assigneeId !== (taskData.assigneeId?._id || taskData.assigneeId || '') ||
+        JSON.stringify(blockedBy.map(t => t._id || t.id)) !== JSON.stringify((taskData.blockedBy || []).map(t => t._id || t.id)) ||
+        JSON.stringify(selectedLabels.map(l => l.text)) !== JSON.stringify((taskData.labels || []).map(l => l.text))
+    , [formData, taskData, blockedBy, selectedLabels]);
 
     const handleUpdate = async (e) => {
         e.preventDefault();
@@ -128,7 +153,9 @@ const UpdateTask = ({ open, handleClose, taskData, onUpdateSuccess, projectMembe
                 estimatedHours: taskData.estimatedHours != null ? Number(taskData.estimatedHours) : undefined,
                 recurrence: formData.recurrenceEnabled
                     ? { enabled: true, frequency: formData.recurrenceFrequency }
-                    : { enabled: false }
+                    : { enabled: false },
+                blockedBy: blockedBy.map(t => t.id || t._id),
+                labels: selectedLabels
             });
 
             if (data?.requiresApproval) {
@@ -208,6 +235,54 @@ const UpdateTask = ({ open, handleClose, taskData, onUpdateSuccess, projectMembe
             setFeedback({ open: true, message: 'Attachment uploaded successfully!', severity: 'success' });
         } catch (error) {
             setFeedback({ open: true, message: error.response?.data?.message || 'Attachment upload failed.', severity: 'error' });
+        } finally {
+            setUploadLoading(false);
+        }
+    };
+
+    const handleAddSubtask = async () => {
+        if (!newSubtaskTitle.trim() || !taskData?.id) return;
+        setUploadLoading(true);
+        try {
+            const response = await taskApi.addSubtask(taskData.id, newSubtaskTitle.trim());
+            setNewSubtaskTitle('');
+            setSubtaskList(response.data.subtasks || []);
+            setActivityList(response.data.activityLog || []);
+            onUpdateSuccess();
+            setFeedback({ open: true, message: 'Subtask added successfully!', severity: 'success' });
+        } catch (error) {
+            setFeedback({ open: true, message: error.response?.data?.message || 'Failed to add subtask.', severity: 'error' });
+        } finally {
+            setUploadLoading(false);
+        }
+    };
+
+    const handleToggleSubtask = async (subtaskId, currentStatus) => {
+        if (!taskData?.id) return;
+        setUploadLoading(true);
+        try {
+            const response = await taskApi.updateSubtask(taskData.id, subtaskId, { isCompleted: !currentStatus });
+            setSubtaskList(response.data.subtasks || []);
+            setActivityList(response.data.activityLog || []);
+            onUpdateSuccess();
+        } catch (error) {
+            setFeedback({ open: true, message: error.response?.data?.message || 'Failed to update subtask.', severity: 'error' });
+        } finally {
+            setUploadLoading(false);
+        }
+    };
+
+    const handleDeleteSubtask = async (subtaskId) => {
+        if (!taskData?.id) return;
+        setUploadLoading(true);
+        try {
+            const response = await taskApi.deleteSubtask(taskData.id, subtaskId);
+            setSubtaskList(response.data.subtasks || []);
+            setActivityList(response.data.activityLog || []);
+            onUpdateSuccess();
+            setFeedback({ open: true, message: 'Subtask deleted successfully!', severity: 'success' });
+        } catch (error) {
+            setFeedback({ open: true, message: error.response?.data?.message || 'Failed to delete subtask.', severity: 'error' });
         } finally {
             setUploadLoading(false);
         }
@@ -359,6 +434,158 @@ const UpdateTask = ({ open, handleClose, taskData, onUpdateSuccess, projectMembe
                                         <MenuItem value="weekly">Weekly</MenuItem>
                                         <MenuItem value="monthly">Monthly</MenuItem>
                                     </TextField>
+                                )}
+                                <Autocomplete
+                                    multiple
+                                    freeSolo
+                                    options={LABEL_OPTIONS}
+                                    getOptionLabel={(option) => {
+                                        if (typeof option === 'string') return option;
+                                        if (option.inputValue) return option.inputValue;
+                                        return option.text;
+                                    }}
+                                    value={selectedLabels}
+                                    onChange={(event, newValue) => {
+                                        const parsedValue = newValue.map(item => {
+                                            if (typeof item === 'string') {
+                                                return { text: item, color: getRandomColor() };
+                                            } else if (item.inputValue) {
+                                                return { text: item.inputValue, color: getRandomColor() };
+                                            }
+                                            return item;
+                                        });
+                                        const uniqueLabels = parsedValue.filter((v, i, a) => a.findIndex(t => (t.text === v.text)) === i);
+                                        setSelectedLabels(uniqueLabels);
+                                    }}
+                                    filterOptions={(options, params) => {
+                                        const filtered = filter(options, params);
+                                        const { inputValue } = params;
+                                        const isExisting = options.some((option) => inputValue === option.text);
+                                        if (inputValue !== '' && !isExisting) {
+                                            filtered.push({
+                                                inputValue,
+                                                text: `Add "${inputValue}"`,
+                                            });
+                                        }
+                                        return filtered;
+                                    }}
+                                    renderTags={(value, getTagProps) =>
+                                        value.map((option, index) => (
+                                            <Chip
+                                                key={index}
+                                                label={option.text}
+                                                size="small"
+                                                sx={{ 
+                                                    bgcolor: option.color + '22',
+                                                    color: option.color,
+                                                    fontWeight: 700,
+                                                    border: `1px solid ${option.color}40`
+                                                }}
+                                                {...getTagProps({ index })}
+                                            />
+                                        ))
+                                    }
+                                    renderInput={(params) => (
+                                        <TextField
+                                            {...params}
+                                            label="Labels / Custom Tags"
+                                            placeholder="Select or type..."
+                                            sx={textFieldStyle}
+                                        />
+                                    )}
+                                    disabled={loading}
+                                />
+                                <Autocomplete
+                                    multiple
+                                    options={allTasks.filter(t => t.id !== taskData?.id && t.status !== 'done')}
+                                    getOptionLabel={(option) => option.title || 'Untitled Task'}
+                                    isOptionEqualToValue={(option, value) => option.id === (value.id || value._id)}
+                                    value={blockedBy}
+                                    onChange={(event, newValue) => setBlockedBy(newValue)}
+                                    renderTags={(value, getTagProps) =>
+                                        value.map((option, index) => (
+                                            <Chip variant="outlined" size="small" label={option.title} {...getTagProps({ index })} />
+                                        ))
+                                    }
+                                    renderInput={(params) => (
+                                        <TextField
+                                            {...params}
+                                            label="Blocked By (Dependencies)"
+                                            placeholder="Select tasks..."
+                                            sx={textFieldStyle}
+                                        />
+                                    )}
+                                    disabled={loading}
+                                />
+                                <Divider />
+                                <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>Subtasks (Checklist)</Typography>
+                                <Box sx={{ display: 'flex', gap: 1 }}>
+                                    <TextField
+                                        label="New Subtask"
+                                        value={newSubtaskTitle}
+                                        onChange={(e) => setNewSubtaskTitle(e.target.value)}
+                                        fullWidth
+                                        size="small"
+                                        disabled={loading || uploadLoading}
+                                        sx={textFieldStyle}
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Enter') {
+                                                e.preventDefault();
+                                                handleAddSubtask();
+                                            }
+                                        }}
+                                    />
+                                    <Button
+                                        variant="contained"
+                                        onClick={handleAddSubtask}
+                                        disabled={uploadLoading || !newSubtaskTitle.trim()}
+                                        sx={{ textTransform: 'none', px: 3, borderRadius: '12px' }}
+                                    >
+                                        Add
+                                    </Button>
+                                </Box>
+                                {subtaskList.length > 0 && (
+                                    <Box sx={{ mt: 2 }}>
+                                        <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                                            <Typography variant="caption" sx={{ fontWeight: 600 }}>
+                                                Progress: {subtaskList.filter(s => s.isCompleted).length} / {subtaskList.length}
+                                            </Typography>
+                                            <Typography variant="caption" sx={{ fontWeight: 600, color: 'primary.main' }}>
+                                                {Math.round((subtaskList.filter(s => s.isCompleted).length / subtaskList.length) * 100)}%
+                                            </Typography>
+                                        </Box>
+                                        <LinearProgress 
+                                            variant="determinate" 
+                                            value={(subtaskList.filter(s => s.isCompleted).length / subtaskList.length) * 100} 
+                                            sx={{ height: 8, borderRadius: 4, mb: 2 }}
+                                        />
+                                        <List dense sx={{ bgcolor: 'background.default', borderRadius: '12px', p: 1 }}>
+                                            {subtaskList.map((subtask) => (
+                                                <ListItem 
+                                                    key={subtask._id} 
+                                                    disablePadding 
+                                                    sx={{ opacity: subtask.isCompleted ? 0.6 : 1, transition: '0.2s' }}
+                                                    secondaryAction={
+                                                        <IconButton edge="end" aria-label="delete" size="small" color="error" onClick={() => handleDeleteSubtask(subtask._id)}>
+                                                            <DeleteIcon fontSize="small" />
+                                                        </IconButton>
+                                                    }
+                                                >
+                                                    <Checkbox 
+                                                        edge="start" 
+                                                        checked={subtask.isCompleted} 
+                                                        tabIndex={-1} 
+                                                        disableRipple 
+                                                        onChange={() => handleToggleSubtask(subtask._id, subtask.isCompleted)}
+                                                    />
+                                                    <ListItemText 
+                                                        primary={subtask.title} 
+                                                        sx={{ textDecoration: subtask.isCompleted ? 'line-through' : 'none' }}
+                                                    />
+                                                </ListItem>
+                                            ))}
+                                        </List>
+                                    </Box>
                                 )}
                                 <Divider />
                                 <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>Notes</Typography>

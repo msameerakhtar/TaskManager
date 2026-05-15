@@ -15,6 +15,9 @@ const TaskList = lazy(() => import('./features/tasks/TaskList'));
 const ContactUs = lazy(() => import('./pages/ContactUs'));
 const Blog = lazy(() => import('./pages/Blog'));
 const Enterprise = lazy(() => import('./pages/Enterprise'));
+const SuperAdmin = lazy(() => import('./pages/SuperAdmin'));
+const AdminDashboard = lazy(() => import('./pages/AdminDashboard'));
+const MemberDashboard = lazy(() => import('./pages/MemberDashboard'));
 
 const PageLoader = () => (
   <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '40vh' }}>
@@ -64,7 +67,10 @@ const App = () => {
       children: [
         { path: "/tasks", element: <TaskList /> },
         { path: "/profile", element: <Profile /> },
+        { path: "/member-dashboard", element: <MemberDashboard /> },
         { path: "/enterprise", element: <Enterprise /> },
+        { path: "/superadmin", element: <SuperAdmin /> },
+        { path: "/admin-dashboard", element: <AdminDashboard /> },
         { path: "/contact", element: <ContactUs /> },
         { path: "/blog", element: <Blog /> }
       ]

@@ -22,6 +22,15 @@ const userSchema = new mongoose.Schema({
     avatarUrl: {
         type: String,
         default: ''
+    },
+    systemRole: {
+        type: String,
+        enum: ['user', 'superadmin'],
+        default: 'user'
+    },
+    isSuspended: {
+        type: Boolean,
+        default: false
     }
 }, { timestamps: true });
 

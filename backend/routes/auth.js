@@ -40,6 +40,10 @@ router.post('/signup', /*verifyRecaptcha,*/ async (req, res) => {
         });
 
         await user.save();
+        
+        if (req.app.get('io')) {
+            req.app.get('io').to('room:superadmin').emit('user:created', { user: { id: user._id, fullName, email } });
+        }
 
         await Project.create({
             name: `${fullName.split(' ')[0]}'s Workspace`,
@@ -47,10 +51,10 @@ router.post('/signup', /*verifyRecaptcha,*/ async (req, res) => {
             members: [{ userId: user._id, role: 'admin' }]
         });
 
-        const payload = { id: user._id };
+        const payload = { id: user._id, systemRole: user.systemRole };
         const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '24h' });
 
-        res.status(201).json({ token, user: { id: user._id, fullName, email, avatarUrl } });
+        res.status(201).json({ token, user: { id: user._id, fullName, email, avatarUrl, systemRole: user.systemRole } });
     } catch (err) {
         console.error('FULL SIGNUP ERROR:', err);
         if (err.code === 11000) {
@@ -74,15 +78,19 @@ router.post('/login', /*verifyRecaptcha,*/ async (req, res) => {
             return res.status(400).json({ message: 'Invalid Credentials' });
         }
 
+        if (user.isSuspended) {
+            return res.status(403).json({ message: 'Your account has been suspended by the administrator.' });
+        }
+
         const isMatch = await user.comparePassword(password);
         if (!isMatch) {
             return res.status(400).json({ message: 'Invalid Credentials' });
         }
 
-        const payload = { id: user._id };
+        const payload = { id: user._id, systemRole: user.systemRole };
         const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '24h' });
 
-        res.json({ token, user: { id: user._id, fullName: user.fullName, email: user.email, avatarUrl: user.avatarUrl } });
+        res.json({ token, user: { id: user._id, fullName: user.fullName, email: user.email, avatarUrl: user.avatarUrl, systemRole: user.systemRole } });
     } catch (err) {
         console.error('Login Error:', err);
         res.status(500).json({ message: err.message || 'Server Error' });
@@ -129,7 +137,7 @@ router.put('/profile', authMiddleware, async (req, res) => {
         if (avatarUrl !== undefined) user.avatarUrl = avatarUrl;
 
         await user.save();
-        res.json({ id: user._id, fullName: user.fullName, email: user.email, avatarUrl: user.avatarUrl });
+        res.json({ id: user._id, fullName: user.fullName, email: user.email, avatarUrl: user.avatarUrl, systemRole: user.systemRole });
     } catch (err) {
         console.error(err.message);
         res.status(500).send('Server Error');

@@ -249,7 +249,33 @@ router.post('/approvals/:requestId/approve', async (req, res) => {
         requestDoc.comment = (req.body?.comment || '').trim();
         await requestDoc.save();
 
-        // 2. Update Task Status
+        const io = req.app.get('io');
+
+        if (requestDoc.type === 'deletion') {
+            await Task.findByIdAndDelete(task._id);
+
+            await logAudit({
+                actorId: req.user.id,
+                projectId: project._id,
+                entityType: 'approval',
+                entityId: requestDoc._id,
+                action: 'approved',
+                meta: { taskId: task._id.toString(), type: 'deletion' },
+                ip: req.ip
+            });
+
+            if (io) {
+                io.to(`project:${project._id}`).emit('task:changed', {
+                    action: 'deleted',
+                    projectId: project._id.toString(),
+                    taskId: task._id.toString()
+                });
+            }
+
+            return res.json({ success: true, request: requestDoc });
+        }
+
+        // 2. Update Task Status (Completion)
         task.status = 'done';
         task.completedAt = new Date();
         task.approvalStatus = 'approved';
@@ -259,8 +285,6 @@ router.post('/approvals/:requestId/approve', async (req, res) => {
             detail: 'Completion approved by admin'
         });
         await task.save();
-
-        const io = req.app.get('io');
 
         // 3. Handle Recurring Tasks
         if (task.recurrence?.enabled && task.recurrence?.frequency) {
@@ -348,14 +372,24 @@ router.post('/approvals/:requestId/reject', async (req, res) => {
         requestDoc.comment = (req.body?.comment || '').trim();
         await requestDoc.save();
 
-        task.approvalStatus = 'rejected';
-        task.completedAt = null;
-        task.activityLog.push({
-            actorId: req.user.id,
-            action: 'rejected',
-            detail: requestDoc.comment || 'Completion rejected'
-        });
-        await task.save();
+        if (requestDoc.type === 'deletion') {
+            task.deletionStatus = 'rejected';
+            task.activityLog.push({
+                actorId: req.user.id,
+                action: 'rejected',
+                detail: requestDoc.comment || 'Deletion rejected'
+            });
+            await task.save();
+        } else {
+            task.approvalStatus = 'rejected';
+            task.completedAt = null;
+            task.activityLog.push({
+                actorId: req.user.id,
+                action: 'rejected',
+                detail: requestDoc.comment || 'Completion rejected'
+            });
+            await task.save();
+        }
 
         await logAudit({
             actorId: req.user.id,

@@ -32,6 +32,7 @@ const useTaskSocket = ({
       if (projectId && projectId === activeProjectRef.current) {
         fetchTasks();
         fetchPhase4Data();
+        window.dispatchEvent(new CustomEvent('tm-socket-task-changed', { detail: { projectId } }));
       }
     });
     socket.on('presence:update', ({ projectId, onlineCount: nextOnlineCount }) => {
@@ -43,9 +44,10 @@ const useTaskSocket = ({
       fetchNotifications();
     });
     socket.on('project:updated', ({ projectId }) => {
+      fetchProjects(); // Always update the projects list for sidebar/navbar dropdowns
       if (projectId && projectId === activeProjectRef.current) {
-        fetchProjects();
         fetchPhase4Data();
+        window.dispatchEvent(new CustomEvent('tm-socket-project-updated', { detail: { projectId } }));
       }
     });
 
