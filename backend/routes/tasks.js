@@ -437,6 +437,7 @@ router.put('/:id', async (req, res) => {
             await task.save();
 
             const adminMembers = project.members.filter((m) => m.role === 'admin');
+            const io = req.app.get('io');
             for (const m of adminMembers) {
                 await Notification.create({
                     userId: m.userId,
@@ -445,6 +446,7 @@ router.put('/:id', async (req, res) => {
                     title: 'Approval required',
                     message: `Task "${task.title}" needs approval to mark done.`
                 });
+                // Note: Notification model's post('save') hook auto-emits 'notification:new'
             }
             const slackUrl = project.enterprise?.integrations?.slackWebhookUrl;
             if (slackUrl) {
@@ -558,6 +560,7 @@ router.delete('/:id', async (req, res) => {
 
             const Notification = require('../models/Notification');
             const adminMembers = project.members.filter((m) => m.role === 'admin');
+            const ioInst = req.app.get('io');
             for (const m of adminMembers) {
                 await Notification.create({
                     userId: m.userId,
@@ -566,6 +569,7 @@ router.delete('/:id', async (req, res) => {
                     title: 'Approval required',
                     message: `Task "${task.title}" needs approval to be deleted.`
                 });
+                // Note: Notification model's post('save') hook auto-emits 'notification:new'
             }
 
             await logAudit({

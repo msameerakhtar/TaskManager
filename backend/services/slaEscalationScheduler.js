@@ -15,6 +15,7 @@ const notifyUser = async (userId, task, type, title, message) => {
         title,
         message
     });
+    // Note: Notification model's post('save') hook auto-emits 'notification:new' to user:${userId}
 };
 
 const runSlaEscalationJob = async () => {

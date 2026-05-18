@@ -26,6 +26,7 @@ const runDueSoonReminderJob = async () => {
             title: 'Task Due Soon',
             message: `"${task.title}" is due within 24 hours.`
         });
+        // Note: Notification model's post('save') hook auto-emits 'notification:new' to user:${task.userId}
 
         task.reminder = { ...(task.reminder || {}), dueSoonSentAt: new Date() };
         await task.save();

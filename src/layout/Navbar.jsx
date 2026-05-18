@@ -23,6 +23,8 @@ import { useDispatch, useSelector } from 'react-redux';
 import { logout } from '../features/auth/authSlice';
 import { notificationApi } from '../api/notificationApi';
 import ProfileUpdateModal from '../features/auth/ProfileUpdateModal';
+import { io } from 'socket.io-client';
+import { API_BASE_URL } from '../api/axiosInstance';
 
 const Navbar = ({ mode, toggleTheme }) => {
     const navigate = useNavigate();
@@ -152,6 +154,25 @@ const Navbar = ({ mode, toggleTheme }) => {
             fetchNotifications(1, false);
         }
     }, [token, user, fetchNotifications]);
+
+    // ── Real-time notification socket ──────────────────────────────────────
+    useEffect(() => {
+        if (!token || !user) return;
+        const socketBaseUrl = API_BASE_URL.replace('/api', '');
+        const socket = io(socketBaseUrl, {
+            auth: { token },
+            transports: ['polling']
+        });
+        socket.on('notification:new', () => {
+            // Increment badge count immediately, then refresh the full list
+            setUnreadCount((prev) => prev + 1);
+            fetchNotifications(1, false);
+        });
+        return () => {
+            socket.disconnect();
+        };
+    }, [token, user, fetchNotifications]);
+    // ────────────────────────────────────────────────────────────────────────
 
     const handleOpenNotifications = useCallback(async (event) => {
         setNotificationAnchorEl(event.currentTarget);
