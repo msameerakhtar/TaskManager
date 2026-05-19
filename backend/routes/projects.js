@@ -32,6 +32,45 @@ router.get('/', async (req, res) => {
     }
 });
 
+// GET /api/projects/:id/my-permissions
+router.get('/:id/my-permissions', async (req, res) => {
+    try {
+        const project = await Project.findById(req.params.id);
+        if (!project) return res.status(404).json({ message: 'Project not found' });
+        
+        const isSuper = req.user && req.user.systemRole === 'superadmin';
+        const isMember = project.members.some((m) => memberUserIdString(m) === String(req.user.id));
+        
+        if (!isSuper && !isMember && String(project.ownerId) !== String(req.user.id)) {
+            return res.status(403).json({ message: 'Not authorized' });
+        }
+        
+        // Resolve role name
+        let roleName = 'viewer';
+        if (String(project.ownerId) === String(req.user.id)) {
+            roleName = 'admin';
+        } else {
+            const member = project.members.find((m) => memberUserIdString(m) === String(req.user.id));
+            if (member) {
+                roleName = member.role;
+            }
+        }
+        
+        if (isSuper) {
+            roleName = 'superadmin';
+        }
+        
+        const Role = require('../models/Role');
+        const roleDoc = await Role.findOne({ name: roleName.toLowerCase() });
+        const permissions = roleDoc ? roleDoc.permissions : [];
+        
+        res.json({ role: roleName, permissions });
+    } catch (error) {
+        console.error('Fetch my-permissions error:', error);
+        res.status(500).send('Server Error');
+    }
+});
+
 // POST /api/projects
 router.post('/', async (req, res) => {
     const { name } = req.body;
@@ -129,6 +168,7 @@ router.patch('/:id/members/:userId', async (req, res) => {
 
         if (req.app.get('io')) {
             req.app.get('io').to(`project:${project._id}`).emit('project:updated', { projectId: project._id });
+            req.app.get('io').to(`user:${req.params.userId}`).emit('permissions:updated', { projectId: project._id });
         }
         const populated = await Project.findById(project._id).populate('members.userId', 'fullName email');
         res.json(populated);

@@ -21,7 +21,7 @@ import useTaskSocket from './hooks/useTaskSocket';
 import { useDispatch, useSelector } from 'react-redux';
 import { useLocation } from 'react-router-dom';
 import { setTasks, setLoading as setReduxLoading } from '../../features/tasks/tasksSlice';
-import { setCurrentRole } from '../../features/auth/authSlice';
+import { setCurrentRole, setCurrentPermissions } from '../../features/auth/authSlice';
 import { taskApi } from '../../api/taskApi';
 import { projectApi } from '../../api/projectApi';
 import { notificationApi } from '../../api/notificationApi';
@@ -136,19 +136,30 @@ const TaskList = () => {
     }
   }, [location.search, selectedProjectId]);
 
-  useEffect(() => {
-    if (selectedProjectId && projects.length > 0) {
+  const fetchPerms = useCallback(async () => {
+    if (selectedProjectId && projects.length > 0 && currentUserId) {
       const p = projects.find(p => p._id === selectedProjectId);
-      if (p && currentUserId) {
+      if (p) {
         const mem = p.members.find(m => String(m.userId?._id || m.userId) === String(currentUserId));
         if (mem) {
           dispatch(setCurrentRole(mem.role));
         } else if (user?.systemRole === 'superadmin') {
           dispatch(setCurrentRole('admin'));
         }
+
+        try {
+          const { data } = await projectApi.getMyPermissions(selectedProjectId);
+          dispatch(setCurrentPermissions(data.permissions));
+        } catch (e) {
+          console.error('Failed to fetch workspace permissions:', e);
+        }
       }
     }
-  }, [selectedProjectId, projects, currentUserId, dispatch]);
+  }, [selectedProjectId, projects, currentUserId, dispatch, user?.systemRole]);
+
+  useEffect(() => {
+    fetchPerms();
+  }, [fetchPerms]);
 
   const fetchNotifications = useCallback(async () => {
     try {
@@ -225,7 +236,8 @@ const TaskList = () => {
     fetchProjects,
     fetchNotifications,
     fetchPhase4Data,
-    setOnlineCount
+    setOnlineCount,
+    fetchPerms
   });
 
   useEffect(() => {

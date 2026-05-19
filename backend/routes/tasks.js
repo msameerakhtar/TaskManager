@@ -315,6 +315,13 @@ router.post('/', async (req, res) => {
     }
 
     try {
+        const { hasPermission } = require('../utils/rbac');
+        const project = await Project.findById(taskData.projectId);
+        const allowed = await hasPermission(project, req.user.id, 'tasks:create');
+        if (!allowed) {
+            return res.status(403).json({ message: 'You do not have permission to create tasks in this project.' });
+        }
+
         if (req.body.autoPriority === true && !taskData.priority) {
             const openTasks = await Task.find({
                 projectId: taskData.projectId,
@@ -372,6 +379,12 @@ router.put('/:id', async (req, res) => {
         const project = await Project.findById(task.projectId);
         if (!project || !isProjectMember(project, req.user.id)) {
             return res.status(403).json({ message: 'Not authorized' });
+        }
+
+        const { hasPermission } = require('../utils/rbac');
+        const allowed = await hasPermission(project, req.user.id, 'tasks:edit');
+        if (!allowed) {
+            return res.status(403).json({ message: 'You do not have permission to edit tasks in this project.' });
         }
 
         const previousStatus = task.status;
@@ -530,14 +543,15 @@ router.delete('/:id', async (req, res) => {
         if (!task) return res.status(404).json({ message: 'Task not found' });
 
         const project = await Project.findById(task.projectId);
-        const role = project ? getProjectRole(project, req.user.id) : null;
-        if (!project || !role) {
-            return res.status(403).json({ message: 'Not authorized' });
-        }
-        const requireApproval = project.enterprise?.requireApprovalForCompletion && role !== 'admin';
+        if (!project) return res.status(403).json({ message: 'Not authorized' });
 
-        if (role !== 'admin' && task.userId.toString() !== req.user.id && !requireApproval) {
-            return res.status(403).json({ message: 'Only admins or task creators can delete this task.' });
+        const { hasPermission } = require('../utils/rbac');
+        const canDelete = await hasPermission(project, req.user.id, 'tasks:delete');
+        const isProjectAdmin = project.ownerId && String(project.ownerId) === String(req.user.id);
+        const requireApproval = project.enterprise?.requireApprovalForCompletion && !isProjectAdmin;
+
+        if (!canDelete && task.userId.toString() !== req.user.id && !requireApproval) {
+            return res.status(403).json({ message: 'Only authorized users or task creators can delete this task.' });
         }
 
         if (requireApproval) {

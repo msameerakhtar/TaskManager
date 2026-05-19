@@ -1,4 +1,5 @@
 import { createTheme } from '@mui/material/styles';
+import { getScrollbarStyles } from './scrollbar';
 
 const theme = (mode) => {
     const isDark = mode === 'dark';
@@ -194,13 +195,14 @@ const theme = (mode) => {
                     },
                 },
             },
-            // MuiCssBaseline: {
-            //     styleOverrides: `
-            //         .grecaptcha-badge { 
-            //             visibility: hidden !important;
-            //         }
-            //     `,
-            // },
+            MuiCssBaseline: {
+                styleOverrides: `
+                    .grecaptcha-badge { 
+                        visibility: hidden !important;
+                    }
+                    ${getScrollbarStyles(mode)}
+                `,
+            },
         },
     });
 };

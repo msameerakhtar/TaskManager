@@ -48,6 +48,7 @@ const Navbar = ({ mode, toggleTheme }) => {
     const isHomePage = location.pathname === '/';
     
     const currentRole = useSelector((state) => state.auth.currentRole);
+    const currentPermissions = useSelector((state) => state.auth.currentPermissions || []);
     
     const fullName = useMemo(() => user?.fullName || user?.email?.split('@')[0] || "User", [user]);
     const avatarUrl = useMemo(() => user?.avatarUrl, [user]);
@@ -65,9 +66,12 @@ const Navbar = ({ mode, toggleTheme }) => {
         else {
             if (currentRole === 'admin') {
                 items.push({ label: 'Admin Dashboard', path: '/admin-dashboard' });
-                items.push({ label: 'Enterprise', path: '/enterprise' });
             } else if (currentRole === 'member') {
                 items.push({ label: 'My Dashboard', path: '/member-dashboard' });
+            }
+
+            if (currentRole === 'admin' || currentPermissions.includes('enterprise:manage')) {
+                items.push({ label: 'Enterprise', path: '/enterprise' });
             }
         }
 
@@ -75,7 +79,7 @@ const Navbar = ({ mode, toggleTheme }) => {
         items.push({ label: 'Contact Us', path: '/contact' });
         items.push({ label: 'Blog', path: '/blog' });
         return items;
-    }, [currentRole, user?.systemRole]);
+    }, [currentRole, currentPermissions, user?.systemRole]);
 
     const handleLogoutClick = useCallback(() => {
         setAnchorEl(null);
@@ -442,6 +446,7 @@ const Navbar = ({ mode, toggleTheme }) => {
                                 </Menu>
                                 <IconButton onClick={(e) => setAnchorEl(e.currentTarget)} sx={{ p: 0.5 }}>
                                     <Avatar 
+                                        key={avatarUrl || 'no-avatar'}
                                         src={avatarUrl}
                                         alt={fullName}
                                         sx={{ 

@@ -4,11 +4,13 @@ const PDFDocument = require('pdfkit');
 const authMiddleware = require('../middleware/authMiddleware');
 const { exportAuth } = require('../middleware/exportAuth');
 const Project = require('../models/Project');
+const User = require('../models/User');
 const Task = require('../models/Task');
 const AuditLog = require('../models/AuditLog');
 const ApprovalRequest = require('../models/ApprovalRequest');
 const { logAudit } = require('../services/auditService');
 const { isProjectMember, memberUserIdString } = require('../utils/projectAccess');
+const { hasPermission } = require('../utils/rbac');
 
 const getRole = (project, userId) => {
     const uid = String(userId);
@@ -47,7 +49,9 @@ router.get('/exports/tasks.csv', exportAuth, async (req, res) => {
         const project = await Project.findById(projectId);
         if (!project) return res.status(404).json({ message: 'Project not found' });
         if (!req.exportContext.fromApiKey) {
-            if (!isProjectMember(project, req.user.id)) {
+            const userRecord = await User.findById(req.user.id).lean();
+            const isSuper = userRecord && userRecord.systemRole === 'superadmin';
+            if (!isSuper && !isProjectMember(project, req.user.id)) {
                 return res.status(403).json({ message: 'Not authorized' });
             }
         }
@@ -90,8 +94,11 @@ router.get('/exports/audit.csv', exportAuth, async (req, res) => {
         if (req.exportContext.fromApiKey) {
             return res.status(403).json({ message: 'Audit CSV requires user session.' });
         }
-        if (getRole(project, req.user.id) !== 'admin') {
-            return res.status(403).json({ message: 'Only admins can export audit logs.' });
+        const userRecord = await User.findById(req.user.id).lean();
+        const isSuper = userRecord && userRecord.systemRole === 'superadmin';
+        const allowed = isSuper || await hasPermission(project, req.user.id, 'audit:view');
+        if (!allowed) {
+            return res.status(403).json({ message: 'You do not have permission to export audit logs.' });
         }
 
         const logs = await AuditLog.find({ projectId })
@@ -129,7 +136,9 @@ router.get('/exports/report.pdf', exportAuth, async (req, res) => {
         const project = await Project.findById(projectId).populate('members.userId', 'fullName email').lean();
         if (!project) return res.status(404).json({ message: 'Project not found' });
         if (!req.exportContext.fromApiKey) {
-            if (!isProjectMember(project, req.user.id)) {
+            const userRecord = await User.findById(req.user.id).lean();
+            const isSuper = userRecord && userRecord.systemRole === 'superadmin';
+            if (!isSuper && !isProjectMember(project, req.user.id)) {
                 return res.status(403).json({ message: 'Not authorized' });
             }
         }
@@ -172,11 +181,17 @@ router.get('/audit', async (req, res) => {
         const { projectId } = req.query;
         if (!projectId) return res.status(400).json({ message: 'projectId is required.' });
         const project = await Project.findById(projectId);
-        if (!project || !isProjectMember(project, req.user.id)) {
-            return res.status(403).json({ message: 'Not authorized' });
-        }
-        if (getRole(project, req.user.id) !== 'admin') {
-            return res.status(403).json({ message: 'Only admins can view audit logs.' });
+        const userRecord = await User.findById(req.user.id).lean();
+        const isSuper = userRecord && userRecord.systemRole === 'superadmin';
+        
+        if (!isSuper) {
+            if (!project || !isProjectMember(project, req.user.id)) {
+                return res.status(403).json({ message: 'Not authorized' });
+            }
+            const allowed = await hasPermission(project, req.user.id, 'audit:view');
+            if (!allowed) {
+                return res.status(403).json({ message: 'You do not have permission to view audit logs.' });
+            }
         }
 
         const page = Math.min(Math.max(parseInt(req.query.page, 10) || 1, 1), 500);
@@ -206,11 +221,17 @@ router.get('/approvals/pending', async (req, res) => {
         const { projectId } = req.query;
         if (!projectId) return res.status(400).json({ message: 'projectId is required.' });
         const project = await Project.findById(projectId);
-        if (!project || !isProjectMember(project, req.user.id)) {
-            return res.status(403).json({ message: 'Not authorized' });
-        }
-        if (getRole(project, req.user.id) !== 'admin') {
-            return res.status(403).json({ message: 'Only admins can manage approvals.' });
+        const userRecord = await User.findById(req.user.id).lean();
+        const isSuper = userRecord && userRecord.systemRole === 'superadmin';
+        
+        if (!isSuper) {
+            if (!project || !isProjectMember(project, req.user.id)) {
+                return res.status(403).json({ message: 'Not authorized' });
+            }
+            const allowed = await hasPermission(project, req.user.id, 'tasks:approve');
+            if (!allowed) {
+                return res.status(403).json({ message: 'You do not have permission to view pending approvals.' });
+            }
         }
 
         const list = await ApprovalRequest.find({ projectId, status: 'pending' })
@@ -235,8 +256,14 @@ router.post('/approvals/:requestId/approve', async (req, res) => {
         }
 
         const project = await Project.findById(requestDoc.projectId);
-        if (!project || getRole(project, req.user.id) !== 'admin') {
-            return res.status(403).json({ message: 'Only project admins can approve requests.' });
+        const userRecord = await User.findById(req.user.id).lean();
+        const isSuper = userRecord && userRecord.systemRole === 'superadmin';
+        
+        if (!isSuper) {
+            const allowed = await hasPermission(project, req.user.id, 'tasks:approve');
+            if (!allowed) {
+                return res.status(403).json({ message: 'Only project admins or authorized members can approve requests.' });
+            }
         }
 
         const task = await Task.findById(requestDoc.taskId);
@@ -359,8 +386,14 @@ router.post('/approvals/:requestId/reject', async (req, res) => {
         }
 
         const project = await Project.findById(requestDoc.projectId);
-        if (!project || getRole(project, req.user.id) !== 'admin') {
-            return res.status(403).json({ message: 'Only project admins can reject.' });
+        const userRecord = await User.findById(req.user.id).lean();
+        const isSuper = userRecord && userRecord.systemRole === 'superadmin';
+        
+        if (!isSuper) {
+            const allowed = await hasPermission(project, req.user.id, 'tasks:approve');
+            if (!allowed) {
+                return res.status(403).json({ message: 'Only project admins or authorized members can reject requests.' });
+            }
         }
 
         const task = await Task.findById(requestDoc.taskId);

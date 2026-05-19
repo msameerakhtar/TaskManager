@@ -39,4 +39,7 @@ export const projectApi = {
 
   testEmail: (projectId) =>
     api.post(`/projects/${projectId}/integrations/test-email`),
+
+  getMyPermissions: (projectId) =>
+    api.get(`/projects/${projectId}/my-permissions`),
 };

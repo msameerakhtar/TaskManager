@@ -6,6 +6,7 @@ import EditIcon from '@mui/icons-material/Edit';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import LibraryAddCheckIcon from '@mui/icons-material/LibraryAddCheck';
 import LockIcon from '@mui/icons-material/Lock';
+import DeleteIcon from '@mui/icons-material/Delete';
 import CustomLoader from '../../components/CustomLoader';
 import DeleteTask from './DeleteTask';
 

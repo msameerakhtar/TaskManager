@@ -1,3 +1,4 @@
+// Main Server Entrypoint - Triggers Default Roles Seeder Reload
 const express = require('express');
 const http = require('http');
 const mongoose = require('mongoose');
@@ -11,6 +12,7 @@ const fs = require('fs');
 const jwt = require('jsonwebtoken');
 const { Server } = require('socket.io');
 const { startReminderScheduler } = require('./services/reminderScheduler');
+const { seedDefaultRoles } = require('./services/rbacSeeder');
 const Project = require('./models/Project');
 const User = require('./models/User');
 
@@ -45,7 +47,9 @@ if (!fs.existsSync(uploadsDir)) {
 }
 
 // Middleware
-app.use(helmet());
+app.use(helmet({
+    crossOriginResourcePolicy: false
+}));
 app.use(compression());
 app.use(cors({ origin: CORS_ORIGIN }));
 app.use(express.json());
@@ -163,6 +167,7 @@ mongoose.connect(process.env.MONGODB_URI, {
     .then(async () => {
         console.log('✅ MongoDB Connected Successfully to local/cloud instance');
         startReminderScheduler();
+        await seedDefaultRoles();
         
         // Ensure Super Admin exists
         try {

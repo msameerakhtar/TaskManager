@@ -167,7 +167,7 @@ const AdminDashboard = () => {
                 <Paper sx={{ p: { xs: 2, md: 3 }, borderRadius: 3, height: { xs: 300, md: 380 }, display: 'flex', flexDirection: 'column' }}>
                     <Typography variant="h6" sx={{ fontWeight: 700, mb: 2, fontSize: { xs: '1.1rem', md: '1.25rem' } }}>Active Workload (Tasks per Member)</Typography>
                     <Box sx={{ flexGrow: 1, minHeight: 0 }}>
-                    <ResponsiveContainer width="100%" height="100%">
+                    <ResponsiveContainer width="100%" height={300}>
                         <BarChart data={stats.workloadData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                         <CartesianGrid strokeDasharray="3 3" stroke={isDark ? '#444' : '#eee'} />
                         <XAxis dataKey="name" stroke={isDark ? '#ccc' : '#666'} />
@@ -187,7 +187,7 @@ const AdminDashboard = () => {
                 <Paper sx={{ p: { xs: 2, md: 3 }, borderRadius: 3, height: { xs: 300, md: 380 }, display: 'flex', flexDirection: 'column' }}>
                     <Typography variant="h6" sx={{ fontWeight: 700, mb: 2, fontSize: { xs: '1.1rem', md: '1.25rem' } }}>Task Status Distribution</Typography>
                     <Box sx={{ flexGrow: 1, minHeight: 0 }}>
-                    <ResponsiveContainer width="100%" height="100%">
+                    <ResponsiveContainer width="100%" height={300}>
                     <PieChart>
                         <Pie
                         data={stats.taskData}

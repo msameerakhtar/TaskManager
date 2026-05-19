@@ -13,7 +13,8 @@ const useTaskSocket = ({
   fetchProjects,
   fetchNotifications,
   fetchPhase4Data,
-  setOnlineCount
+  setOnlineCount,
+  fetchPerms
 }) => {
   const socketRef = useRef(null);
   const activeProjectRef = useRef(null);
@@ -51,6 +52,10 @@ const useTaskSocket = ({
       }
     });
 
+    socket.on('permissions:updated', () => {
+      if (fetchPerms) fetchPerms();
+    });
+
     return () => {
       if (activeProjectRef.current) {
         socket.emit('project:leave', { projectId: activeProjectRef.current });
@@ -58,7 +63,7 @@ const useTaskSocket = ({
       socket.disconnect();
       socketRef.current = null;
     };
-  }, [token, fetchTasks]);
+  }, [token, fetchTasks, fetchPerms]);
 
   // Handle project room switching
   useEffect(() => {

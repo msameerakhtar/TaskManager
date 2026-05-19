@@ -1,9 +1,9 @@
-import React, { lazy, Suspense, useState, useMemo, useCallback } from 'react';
+import React, { lazy, Suspense, useState, useMemo, useCallback, useEffect } from 'react';
 import { createBrowserRouter, RouterProvider, Navigate } from 'react-router-dom';
 import { Box, CssBaseline, ThemeProvider } from '@mui/material';
-// import { GoogleReCaptchaProvider } from 'react-google-recaptcha-v3';
 import theme from './theme/index'; 
 import ProtectedRoute from './routes/ProtectedRoute';
+import RoleRoute from './routes/RoleRoute';
 import CustomLoader from './components/CustomLoader';
 
 const Home = lazy(() => import('./pages/Home'));
@@ -15,7 +15,13 @@ const TaskList = lazy(() => import('./features/tasks/TaskList'));
 const ContactUs = lazy(() => import('./pages/ContactUs'));
 const Blog = lazy(() => import('./pages/Blog'));
 const Enterprise = lazy(() => import('./pages/Enterprise'));
-const SuperAdmin = lazy(() => import('./pages/SuperAdmin'));
+const SuperAdminLayout = lazy(() => import('./layout/SuperAdminLayout'));
+const SuperAdminOverview = lazy(() => import('./pages/admin/SuperAdminOverview'));
+const SuperAdminUsers = lazy(() => import('./pages/admin/SuperAdminUsers'));
+const SuperAdminWorkspaces = lazy(() => import('./pages/admin/SuperAdminWorkspaces'));
+const SuperAdminAudit = lazy(() => import('./pages/admin/SuperAdminAudit'));
+const SuperAdminRBAC = lazy(() => import('./pages/admin/SuperAdminRBAC'));
+
 const AdminDashboard = lazy(() => import('./pages/AdminDashboard'));
 const MemberDashboard = lazy(() => import('./pages/MemberDashboard'));
 
@@ -26,10 +32,17 @@ const PageLoader = () => (
 );
 
 const App = () => {
-  const [mode, setMode] = useState('dark');
+  const [mode, setMode] = useState(() => {
+    const saved = localStorage.getItem('theme-mode');
+    return saved === 'dark' || saved === 'light' ? saved : 'light';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('theme-mode', mode);
+  }, [mode]);
 
   const activeTheme = useMemo(() => {
-    const currentMode = typeof mode === 'string' ? mode : 'dark';
+    const currentMode = typeof mode === 'string' ? mode : 'light';
     return theme(currentMode);
   }, [mode]);
 
@@ -65,14 +78,51 @@ const App = () => {
         </ProtectedRoute>
       ),
       children: [
-        { path: "/tasks", element: <TaskList /> },
-        { path: "/profile", element: <Profile /> },
-        { path: "/member-dashboard", element: <MemberDashboard /> },
-        { path: "/enterprise", element: <Enterprise /> },
-        { path: "/superadmin", element: <SuperAdmin /> },
-        { path: "/admin-dashboard", element: <AdminDashboard /> },
-        { path: "/contact", element: <ContactUs /> },
-        { path: "/blog", element: <Blog /> }
+        { path: '/tasks',            element: <TaskList /> },
+        { path: '/profile',          element: <Profile /> },
+        { path: '/contact',          element: <ContactUs /> },
+        { path: '/blog',             element: <Blog /> },
+        // Member-accessible (superadmin blocked — they have their own panel)
+        {
+          path: '/member-dashboard',
+          element: (
+            <RoleRoute>
+              <MemberDashboard />
+            </RoleRoute>
+          )
+        },
+        // Admin-only routes — members and superadmins are redirected
+        {
+          path: '/admin-dashboard',
+          element: (
+            <RoleRoute requiredRole="admin">
+              <AdminDashboard />
+            </RoleRoute>
+          )
+        },
+        {
+          path: '/enterprise',
+          element: (
+            <RoleRoute requiredRole="admin" requiredPermission="enterprise:manage">
+              <Enterprise />
+            </RoleRoute>
+          )
+        },
+      ]
+    },
+    {
+      element: (
+        <ProtectedRoute>
+          <SuperAdminLayout toggleTheme={toggleTheme} mode={mode} />
+        </ProtectedRoute>
+      ),
+      children: [
+        { path: "/admin/overview", element: <SuperAdminOverview /> },
+        { path: "/admin/users", element: <SuperAdminUsers /> },
+        { path: "/admin/workspaces", element: <SuperAdminWorkspaces /> },
+        { path: "/admin/audit", element: <SuperAdminAudit /> },
+        { path: "/admin/rbac", element: <SuperAdminRBAC /> },
+        { path: "/admin", element: <Navigate to="/admin/overview" replace /> }
       ]
     },
     { path: "*", element: <Navigate to="/" replace /> }

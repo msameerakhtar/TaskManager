@@ -7,9 +7,10 @@ import {
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import { io } from 'socket.io-client';
 import { API_BASE_URL } from '../api/axiosInstance';
-import { useSelector } from 'react-redux';
+import { useSelector, useDispatch } from 'react-redux';
 import { projectApi } from '../api/projectApi';
 import { enterpriseApi } from '../api/enterpriseApi';
+import { setCurrentRole, setCurrentPermissions } from '../features/auth/authSlice';
 
 const tabProps = (index) => ({
   id: `enterprise-tab-${index}`,
@@ -19,6 +20,8 @@ const tabProps = (index) => ({
 const Enterprise = () => {
   const token = useSelector((state) => state.auth.token);
   const user = useSelector((state) => state.auth.user);
+  const dispatch = useDispatch();
+  const currentPermissions = useSelector((state) => state.auth.currentPermissions || []);
 
   const [projects, setProjects] = useState([]);
   const [projectId, setProjectId] = useState('');
@@ -79,10 +82,35 @@ const Enterprise = () => {
     () => {
       if (user?.systemRole === 'superadmin') return true;
       if (!projectId) return false;
-      return roleForProject(projects.find((p) => p._id === projectId)) === 'admin';
+      const isOwnerOrAdmin = roleForProject(projects.find((p) => p._id === projectId)) === 'admin';
+      return isOwnerOrAdmin || currentPermissions.includes('enterprise:manage');
     },
-    [projectId, projects, roleForProject, user?.systemRole]
+    [projectId, projects, roleForProject, user?.systemRole, currentPermissions]
   );
+
+  useEffect(() => {
+    const fetchPerms = async () => {
+      if (projectId && projects.length > 0) {
+        const p = projects.find((x) => x._id === projectId);
+        if (p && userId) {
+          const mem = p.members.find(m => String(m.userId?._id || m.userId) === String(userId));
+          if (mem) {
+            dispatch(setCurrentRole(mem.role));
+          } else if (user?.systemRole === 'superadmin') {
+            dispatch(setCurrentRole('admin'));
+          }
+
+          try {
+            const { data } = await projectApi.getMyPermissions(projectId);
+            dispatch(setCurrentPermissions(data.permissions));
+          } catch (e) {
+            console.error('Failed to fetch workspace permissions:', e);
+          }
+        }
+      }
+    };
+    fetchPerms();
+  }, [projectId, projects, userId, dispatch, user?.systemRole]);
 
   useEffect(() => {
     const p = projects.find((x) => x._id === projectId);

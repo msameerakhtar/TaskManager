@@ -8,17 +8,29 @@ const Project = require('../models/Project');
 const multer = require('multer');
 const path = require('path');
 
-const storage = multer.diskStorage({
-    destination: (req, file, cb) => cb(null, 'uploads/'),
-    filename: (req, file, cb) => cb(null, `avatar-${req.user.id}-${Date.now()}${path.extname(file.originalname)}`)
+const cloudinary = require('cloudinary').v2;
+const { CloudinaryStorage } = require('multer-storage-cloudinary');
+
+// Configure Cloudinary
+cloudinary.config({
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+    api_key: process.env.CLOUDINARY_API_KEY,
+    api_secret: process.env.CLOUDINARY_API_SECRET,
 });
+
+// Configure Multer Storage Engine for Cloudinary
+const cloudStorage = new CloudinaryStorage({
+    cloudinary: cloudinary,
+    params: {
+        folder: 'taskmanager-avatars',
+        allowed_formats: ['jpg', 'png', 'jpeg', 'webp'],
+        transformation: [{ width: 250, height: 250, crop: 'fill' }],
+    },
+});
+
 const upload = multer({ 
-    storage,
-    limits: { fileSize: 2 * 1024 * 1024 }, // 2MB limit
-    fileFilter: (req, file, cb) => {
-        if (file.mimetype.startsWith('image/')) cb(null, true);
-        else cb(new Error('Only images are allowed'));
-    }
+    storage: cloudStorage,
+    limits: { fileSize: 2 * 1024 * 1024 } // 2MB limit
 });
 
 // @route   POST api/auth/signup
@@ -115,8 +127,7 @@ router.post('/upload-avatar', authMiddleware, upload.single('avatar'), async (re
     try {
         if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
         
-        const baseUrl = `${req.protocol}://${req.get('host')}`;
-        const avatarUrl = `${baseUrl}/uploads/${req.file.filename}`;
+        const avatarUrl = req.file.path; // Secured Cloudinary image URL
         
         res.json({ avatarUrl });
     } catch (err) {

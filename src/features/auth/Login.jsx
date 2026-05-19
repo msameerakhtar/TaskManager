@@ -33,7 +33,11 @@ const Login = ({ mode, setMode }) => {
     onSuccess: ({ token, user }) => {
       if (token) {
         dispatch(login({ user, token }));
-        navigate('/tasks', { replace: true });
+        if (user?.systemRole === 'superadmin') {
+          navigate('/admin/overview', { replace: true });
+        } else {
+          navigate('/tasks', { replace: true });
+        }
       }
     },
     onError: (err) => {
