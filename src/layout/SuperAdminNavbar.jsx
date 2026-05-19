@@ -10,6 +10,7 @@ import { useDispatch } from 'react-redux';
 import { logout } from '../features/auth/authSlice';
 import { useNavigate } from 'react-router-dom';
 import ProfileUpdateModal from '../features/auth/ProfileUpdateModal';
+import { getOptimizedImageUrl } from '../utils/imageHelper';
 
 const SuperAdminNavbar = ({ handleDrawerToggle, mode, toggleTheme, user }) => {
     const theme = useTheme();
@@ -52,7 +53,7 @@ const SuperAdminNavbar = ({ handleDrawerToggle, mode, toggleTheme, user }) => {
                     <IconButton onClick={handleMenuOpen} sx={{ p: 0, ml: 1 }}>
                         <Avatar 
                             key={user?.avatarUrl || 'no-avatar'}
-                            src={user?.avatarUrl} 
+                            src={getOptimizedImageUrl(user?.avatarUrl, { width: 100, height: 100 })} 
                             alt={user?.fullName} 
                             sx={{ width: 36, height: 36, border: `2px solid ${theme.palette.primary.main}` }}
                         >

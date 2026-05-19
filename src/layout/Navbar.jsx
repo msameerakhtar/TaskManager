@@ -25,6 +25,7 @@ import { notificationApi } from '../api/notificationApi';
 import ProfileUpdateModal from '../features/auth/ProfileUpdateModal';
 import { io } from 'socket.io-client';
 import { API_BASE_URL } from '../api/axiosInstance';
+import { getOptimizedImageUrl } from '../utils/imageHelper';
 
 const Navbar = ({ mode, toggleTheme }) => {
     const navigate = useNavigate();
@@ -51,7 +52,7 @@ const Navbar = ({ mode, toggleTheme }) => {
     const currentPermissions = useSelector((state) => state.auth.currentPermissions || []);
     
     const fullName = useMemo(() => user?.fullName || user?.email?.split('@')[0] || "User", [user]);
-    const avatarUrl = useMemo(() => user?.avatarUrl, [user]);
+    const avatarUrl = useMemo(() => getOptimizedImageUrl(user?.avatarUrl, { width: 100, height: 100 }), [user]);
 
     const navItems = useMemo(() => {
         const items = [

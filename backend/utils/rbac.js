@@ -1,6 +1,7 @@
 const Role = require('../models/Role');
 const User = require('../models/User');
 const { memberUserIdString } = require('./projectAccess');
+const cache = require('./cache');
 
 /**
  * Checks if a user has a specific permission dynamically based on DB roles.
@@ -11,9 +12,17 @@ const { memberUserIdString } = require('./projectAccess');
 const hasPermission = async (project, userId, requiredPermission) => {
     if (!project || !userId) return false;
 
-    // 1. Super Admin bypass
-    const userRecord = await User.findById(userId).lean();
-    if (userRecord && userRecord.systemRole === 'superadmin') {
+    // 1. Super Admin bypass (with cached user record to prevent repetitive DB queries)
+    const userCacheKey = `user:${userId}:role`;
+    let userSystemRole = cache.get(userCacheKey);
+    
+    if (!userSystemRole) {
+        const userRecord = await User.findById(userId).select('systemRole').lean();
+        userSystemRole = userRecord ? userRecord.systemRole : 'user';
+        cache.set(userCacheKey, userSystemRole, 120); // Cache systemRole for 2 minutes
+    }
+    
+    if (userSystemRole === 'superadmin') {
         return true;
     }
 
@@ -30,9 +39,19 @@ const hasPermission = async (project, userId, requiredPermission) => {
 
     if (!roleName) return false; // Not a member of the project
 
-    // 3. Fetch role permissions from the database
-    const roleDoc = await Role.findOne({ name: roleName.toLowerCase() });
-    if (!roleDoc) {
+    // 3. Fetch role permissions from the database (with cache lookup)
+    const roleCacheKey = `role:${roleName.toLowerCase()}`;
+    let rolePermissions = cache.get(roleCacheKey);
+    
+    if (!rolePermissions) {
+        const roleDoc = await Role.findOne({ name: roleName.toLowerCase() }).lean();
+        if (roleDoc) {
+            rolePermissions = roleDoc.permissions;
+            cache.set(roleCacheKey, rolePermissions, 300); // Cache permissions for 5 minutes
+        }
+    }
+
+    if (!rolePermissions) {
         // Fallback to basic default hardcoded permissions if Role is not yet seeded
         if (roleName === 'admin') return true;
         if (roleName === 'member') {
@@ -42,7 +61,7 @@ const hasPermission = async (project, userId, requiredPermission) => {
     }
 
     // 4. Return whether the role permissions array has the required permission
-    return roleDoc.permissions.includes(requiredPermission);
+    return rolePermissions.includes(requiredPermission);
 };
 
 module.exports = { hasPermission };

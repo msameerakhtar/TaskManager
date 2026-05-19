@@ -37,14 +37,14 @@ router.get('/:id/my-permissions', async (req, res) => {
     try {
         const project = await Project.findById(req.params.id);
         if (!project) return res.status(404).json({ message: 'Project not found' });
-        
+
         const isSuper = req.user && req.user.systemRole === 'superadmin';
         const isMember = project.members.some((m) => memberUserIdString(m) === String(req.user.id));
-        
+
         if (!isSuper && !isMember && String(project.ownerId) !== String(req.user.id)) {
             return res.status(403).json({ message: 'Not authorized' });
         }
-        
+
         // Resolve role name
         let roleName = 'viewer';
         if (String(project.ownerId) === String(req.user.id)) {
@@ -55,15 +55,15 @@ router.get('/:id/my-permissions', async (req, res) => {
                 roleName = member.role;
             }
         }
-        
+
         if (isSuper) {
             roleName = 'superadmin';
         }
-        
+
         const Role = require('../models/Role');
         const roleDoc = await Role.findOne({ name: roleName.toLowerCase() });
         const permissions = roleDoc ? roleDoc.permissions : [];
-        
+
         res.json({ role: roleName, permissions });
     } catch (error) {
         console.error('Fetch my-permissions error:', error);
@@ -212,7 +212,7 @@ router.patch('/:id', async (req, res) => {
     try {
         const { name } = req.body;
         if (!name || !name.trim()) return res.status(400).json({ message: 'Name is required' });
-        
+
         const project = await Project.findById(req.params.id);
         if (!project) return res.status(404).json({ message: 'Project not found' });
         if (getUserRoleInProject(project, req.user.id) !== 'admin') {
@@ -236,7 +236,7 @@ router.delete('/:id', async (req, res) => {
     try {
         const project = await Project.findById(req.params.id);
         if (!project) return res.status(404).json({ message: 'Project not found' });
-        
+
         if (getUserRoleInProject(project, req.user.id) !== 'admin') {
             return res.status(403).json({ message: 'Only admins can delete projects' });
         }
@@ -269,7 +269,7 @@ router.get('/:id/dashboard-stats', async (req, res) => {
     try {
         const project = await Project.findById(req.params.id).populate('members.userId', 'fullName email');
         if (!project) return res.status(404).json({ message: 'Project not found' });
-        
+
         if (getUserRoleInProject(project, req.user.id) !== 'admin' && req.user.systemRole !== 'superadmin') {
             return res.status(403).json({ message: 'Only admins can view workspace insights.' });
         }
@@ -331,7 +331,7 @@ router.get('/:id/member-stats', async (req, res) => {
     try {
         const project = await Project.findById(req.params.id);
         if (!project) return res.status(404).json({ message: 'Project not found' });
-        
+
         const role = getUserRoleInProject(project, req.user.id);
         if (!role && req.user.systemRole !== 'superadmin') {
             return res.status(403).json({ message: 'Access denied' });
@@ -440,8 +440,8 @@ router.post('/:id/integrations/test-slack', async (req, res) => {
         if (getUserRoleInProject(project, req.user.id) !== 'admin') {
             return res.status(403).json({ message: 'Only admins can test integrations.' });
         }
-        const url = (req.body.url || project.enterprise?.integrations?.slackWebhookUrl || '').trim();
-        const result = await sendSlackWebhook(url, req.body.message || `Test from Task Manager — ${project.name}`);
+        const url = (req.body?.url || project.enterprise?.integrations?.slackWebhookUrl || '').trim();
+        const result = await sendSlackWebhook(url, req.body?.message || `Test from Task Manager — ${project.name}`);
         if (!result.ok) {
             return res.status(400).json({ message: result.error || 'Slack request failed' });
         }
@@ -461,7 +461,7 @@ router.post('/:id/integrations/test-email', async (req, res) => {
             return res.status(403).json({ message: 'Only admins can test integrations.' });
         }
         const me = await User.findById(req.user.id).select('email').lean();
-        const to = (req.body.to || me?.email || '').trim();
+        const to = (req.body?.to || me?.email || '').trim();
         if (!to) return res.status(400).json({ message: 'No recipient email.' });
         const r = await sendProjectEmail({
             to,
@@ -470,8 +470,8 @@ router.post('/:id/integrations/test-email', async (req, res) => {
         });
         res.json({ ok: true, mocked: r.mocked === true });
     } catch (error) {
-        console.error(error.message);
-        res.status(500).send('Server Error');
+        console.error('Email integration test failed:', error);
+        res.status(500).json({ message: error.message || 'Server Error' });
     }
 });
 

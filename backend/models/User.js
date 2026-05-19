@@ -31,8 +31,24 @@ const userSchema = new mongoose.Schema({
     isSuspended: {
         type: Boolean,
         default: false
+    },
+    isVerified: {
+        type: Boolean,
+        default: false
+    },
+    otpCode: {
+        type: String,
+        default: null
+    },
+    otpExpiresAt: {
+        type: Date,
+        default: null
     }
 }, { timestamps: true });
+
+// Performance Optimization Indexes
+userSchema.index({ systemRole: 1 });
+userSchema.index({ createdAt: -1 });
 
 // Hash password before saving
 userSchema.pre('save', async function() {

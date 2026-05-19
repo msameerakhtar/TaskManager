@@ -6,6 +6,7 @@ const Project = require('../models/Project');
 const Task = require('../models/Task');
 const AuditLog = require('../models/AuditLog');
 const Role = require('../models/Role');
+const cache = require('../utils/cache');
 
 // ── Super Admin middleware ──────────────────────────────────────────────────
 const superAdminMiddleware = (req, res, next) => {
@@ -360,6 +361,10 @@ router.patch('/rbac/roles/:id', async (req, res) => {
         }
 
         await role.save();
+        
+        // Invalidate permissions cache
+        cache.del(`role:${role.name.toLowerCase()}`);
+
         const io = req.app.get('io');
         if (io) {
             io.emit('permissions:updated', { roleName: role.name });
@@ -381,6 +386,9 @@ router.delete('/rbac/roles/:id', async (req, res) => {
         if (role.isSystemDefault) {
             return res.status(400).json({ message: 'System default roles cannot be deleted.' });
         }
+
+        // Invalidate permissions cache
+        cache.del(`role:${role.name.toLowerCase()}`);
 
         await Role.findByIdAndDelete(role._id);
         res.json({ message: 'Custom role deleted successfully' });

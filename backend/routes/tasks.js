@@ -20,19 +20,28 @@ const VALID_PRIORITIES = ['low', 'medium', 'high'];
 const VALID_RECURRENCE = ['daily', 'weekly', 'monthly'];
 const DAILY_CAPACITY_HOURS = 6;
 
-const storage = multer.diskStorage({
-    destination: (req, file, cb) => {
-        cb(null, path.join(__dirname, '..', 'uploads'));
+const cloudinary = require('cloudinary').v2;
+const { CloudinaryStorage } = require('multer-storage-cloudinary');
+
+// Configure Cloudinary
+cloudinary.config({
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+    api_key: process.env.CLOUDINARY_API_KEY,
+    api_secret: process.env.CLOUDINARY_API_SECRET,
+});
+
+// Configure Multer Storage Engine for Cloudinary (Auto-resource type supports PDFs, Images, DOCX, ZIPs)
+const cloudStorage = new CloudinaryStorage({
+    cloudinary: cloudinary,
+    params: {
+        folder: 'taskmanager-attachments',
+        resource_type: 'auto', // Supports raw files like PDFs, ZIPs, DOCX, and images
     },
-    filename: (req, file, cb) => {
-        const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
-        cb(null, `${uniqueSuffix}-${file.originalname.replace(/\s+/g, '_')}`);
-    }
 });
 
 const upload = multer({
-    storage,
-    limits: { fileSize: 5 * 1024 * 1024 }
+    storage: cloudStorage,
+    limits: { fileSize: 10 * 1024 * 1024 } // 10MB limit
 });
 
 const addDays = (date, days) => {
@@ -666,8 +675,8 @@ router.post('/:id/attachments', upload.single('attachment'), async (req, res) =>
 
         task.attachments.push({
             originalName: req.file.originalname,
-            fileName: req.file.filename,
-            filePath: `/uploads/${req.file.filename}`,
+            fileName: req.file.filename || req.file.originalname,
+            filePath: req.file.path, // Secure Cloudinary URL (supports any file type)
             mimeType: req.file.mimetype,
             size: req.file.size
         });

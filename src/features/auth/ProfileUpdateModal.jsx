@@ -16,6 +16,7 @@ import { authApi } from '../../api/authApi';
 import { useDispatch, useSelector } from 'react-redux';
 import { updateUser } from './authSlice';
 import CustomLoader from '../../components/CustomLoader';
+import { getOptimizedImageUrl } from '../../utils/imageHelper';
 
 const ProfileUpdateModal = ({ open, handleClose }) => {
     const theme = useTheme();
@@ -130,7 +131,7 @@ const ProfileUpdateModal = ({ open, handleClose }) => {
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 1 }}>
                                 <Box sx={{ position: 'relative' }}>
                                     <Avatar 
-                                        src={previewUrl} 
+                                        src={previewUrl?.startsWith('blob:') ? previewUrl : getOptimizedImageUrl(previewUrl, { width: 150, height: 150 })} 
                                         sx={{ 
                                             width: 72, 
                                             height: 72, 
