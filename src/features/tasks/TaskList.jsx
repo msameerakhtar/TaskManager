@@ -575,36 +575,17 @@ const TaskList = () => {
           isDark={isDark}
         />
 
-        {/* KPIs */}
-        <Grid container spacing={2} sx={{ mb: 4 }}>
-          {[
-            { title: 'Total Tasks', value: kpis.total, color: theme.palette.info.main, bg: isDark ? 'rgba(2, 136, 209, 0.1)' : '#e0f2fe' },
-            { title: 'Pending', value: kpis.pending, color: theme.palette.warning.main, bg: isDark ? 'rgba(237, 108, 2, 0.1)' : '#fef08a' },
-            { title: 'Completed', value: kpis.completed, color: theme.palette.success.main, bg: isDark ? 'rgba(46, 125, 50, 0.1)' : '#dcfce7' },
-            { title: 'Overdue', value: kpis.overdue, color: theme.palette.error.main, bg: isDark ? 'rgba(211, 47, 47, 0.1)' : '#fee2e2' }
-          ].map((kpi, index) => (
-              <Grid size={{ xs: 6, md: 3 }} key={index}>
-                  <Card elevation={0} sx={{ borderRadius: '16px', bgcolor: kpi.bg, border: `1px solid ${kpi.color}33`, transition: 'transform 0.2s', '&:hover': { transform: 'translateY(-4px)' } }}>
-                      <CardContent sx={{ textAlign: 'center', p: 3 }}>
-                          <Typography variant="body2" sx={{ color: 'text.secondary', fontWeight: 600, mb: 1, textTransform: 'uppercase', letterSpacing: 1 }}>{kpi.title}</Typography>
-                          <Typography variant="h3" sx={{ fontWeight: 900, color: kpi.color }}>{kpi.value}</Typography>
-                      </CardContent>
-                  </Card>
-              </Grid>
-          ))}
-        </Grid>
-
-        {/* Insights & Workload */}
-        <InsightsPanel
-          insights={insights}
-          calendarLinks={calendarLinks}
-          workloadData={workloadData}
-          workloadReady={workloadReady}
-          workloadError={workloadError}
-          selectedProject={selectedProject}
-          isDark={isDark}
-          isAdmin={isAdmin}
-        />
+        {/* Calendar Sync */}
+        {calendarLinks && (
+          <Paper elevation={0} sx={{ p: 3, mb: 4, borderRadius: '16px', border: '1px solid', borderColor: 'divider' }}>
+            <Typography variant="h6" sx={{ fontWeight: 800, mb: 2 }}>Calendar Sync</Typography>
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+              <Button variant="contained" color="primary" href={calendarLinks.googleCalendarUrl} target="_blank" sx={{ borderRadius: '8px', textTransform: 'none' }}>Sync Google</Button>
+              <Button variant="outlined" href={calendarLinks.outlookCalendarUrl} target="_blank" sx={{ borderRadius: '8px', textTransform: 'none' }}>Sync Outlook</Button>
+              <Button variant="outlined" href={calendarLinks.icsUrl} target="_blank" sx={{ borderRadius: '8px', textTransform: 'none' }}>Download ICS</Button>
+            </Stack>
+          </Paper>
+        )}
 
         {notifications.filter((n) => !n.isRead).slice(0, 3).map((notification) => (
           <Alert key={notification._id} severity="info" sx={{ mb: 2, borderRadius: '12px' }}>
@@ -612,7 +593,7 @@ const TaskList = () => {
           </Alert>
         ))}
 
-        {/* Tip Box — changes based on view */}
+        {/* Tip Box — changes based on view (COMMENTED OUT)
         <Paper variant="outlined" sx={{ p: 1.5, mb: 3, borderRadius: '12px', borderColor: 'primary.main', bgcolor: isDark ? 'rgba(99,102,241,0.05)' : 'rgba(99,102,241,0.05)' }}>
           <Typography variant="body2" sx={{ color: 'primary.main', fontWeight: 600, textAlign: 'center' }}>
             {viewMode === 'kanban' && '💡 Tip: Click a task card, then press ← / → arrow keys to move it between columns quickly (or drag cards).'}
@@ -621,6 +602,7 @@ const TaskList = () => {
             {viewMode === 'calendar' && '💡 Tip: View your tasks on a calendar. Click any event to edit or update its details.'}
           </Typography>
         </Paper>
+        */}
 
         {/* ── View Renderer ──────────────────────────────────────── */}
         {viewMode === 'kanban' && (

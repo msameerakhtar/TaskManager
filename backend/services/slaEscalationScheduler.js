@@ -71,8 +71,25 @@ const runSlaEscalationJob = async () => {
             if (slackUrl) {
                 await sendSlackWebhook(slackUrl, `*${title}*\n${message}`).catch(() => {});
             }
+            
+            // Get assignee email if applicable
+            let assigneeEmail = null;
+            if (task.assigneeId) {
+                const assignee = await User.findById(task.assigneeId).select('email').lean();
+                if (assignee && assignee.email) assigneeEmail = assignee.email;
+            }
+
+            // Create a unique set of emails to avoid duplicates
+            const emailsToSend = new Set();
             if (adminEmails.length) {
-                for (const to of adminEmails) {
+                adminEmails.forEach(email => emailsToSend.add(email));
+            }
+            if (assigneeEmail) {
+                emailsToSend.add(assigneeEmail);
+            }
+
+            if (emailsToSend.size > 0) {
+                for (const to of emailsToSend) {
                     await sendProjectEmail({
                         to,
                         subject: `[${project.name}] ${title}`,

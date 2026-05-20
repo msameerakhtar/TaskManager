@@ -9,7 +9,7 @@ const Notification = require('../models/Notification');
 const multer = require('multer');
 const path = require('path');
 const { logAudit } = require('../services/auditService');
-const { sendSlackWebhook } = require('../services/integrationService');
+const { sendSlackWebhook, sendProjectEmail } = require('../services/integrationService');
 const { isProjectMember, memberUserIdString } = require('../utils/projectAccess');
 
 // Sabhi routes authMiddleware use karenge (Protected)
@@ -366,6 +366,22 @@ router.post('/', async (req, res) => {
             meta: { title: task.title },
             ip: req.ip
         });
+
+        // Email: Task Assigned — only if assignee is someone else (not creator)
+        if (task.assigneeId && task.assigneeId.toString() !== req.user.id.toString()) {
+            const [assignee, creator] = await Promise.all([
+                User.findById(task.assigneeId).select('email fullName').lean(),
+                User.findById(req.user.id).select('fullName').lean()
+            ]);
+            if (assignee && assignee.email) {
+                sendProjectEmail({
+                    to: assignee.email,
+                    subject: `Task Manager — New Task Assigned: "${task.title}"`,
+                    text: `Hi ${assignee.fullName || 'there'},\n\nA new task has been assigned to you by ${creator?.fullName || 'an admin'}.\n\nTask: "${task.title}"\nPriority: ${task.priority}\nDue Date: ${new Date(task.dueDate).toDateString()}\n\nPlease log in to Task Manager to view the details.\n\nBest regards,\nTask Manager Team`
+                }).catch(err => console.error('[Email] Task assigned failed:', err));
+            }
+        }
+
         res.status(201).json(task);
     } catch (err) {
         console.error(err.message);
@@ -397,6 +413,8 @@ router.put('/:id', async (req, res) => {
         }
 
         const previousStatus = task.status;
+        const previousAssigneeId = task.assigneeId;  // Track old assignee for re-assign email
+        const previousBlockedByIds = [...(task.blockedBy || [])]; // Track old blocked-by for task blocked email
         const wantsDone = taskData.status === 'done' && previousStatus !== 'done';
         const requireApproval = !!(project.enterprise && project.enterprise.requireApprovalForCompletion);
         
@@ -513,6 +531,110 @@ router.put('/:id', async (req, res) => {
             meta: { status: task.status, title: task.title },
             ip: req.ip
         });
+
+        // Email: Assignee changed (Re-assigned or Removed)
+        if (taskData.assigneeId !== undefined) {
+            const oldAssigneeId = previousAssigneeId ? previousAssigneeId.toString() : null;
+            const newAssigneeId = task.assigneeId ? task.assigneeId.toString() : null;
+            const actorId = req.user.id.toString();
+
+            // New assignee is different from old one
+            if (newAssigneeId && newAssigneeId !== oldAssigneeId && newAssigneeId !== actorId) {
+                const [newAssignee, actor] = await Promise.all([
+                    User.findById(newAssigneeId).select('email fullName').lean(),
+                    User.findById(actorId).select('fullName').lean()
+                ]);
+                if (newAssignee && newAssignee.email) {
+                    sendProjectEmail({
+                        to: newAssignee.email,
+                        subject: `Task Manager — Task Re-assigned to You: "${task.title}"`,
+                        text: `Hi ${newAssignee.fullName || 'there'},\n\nThe task "${task.title}" has been assigned to you by ${actor?.fullName || 'an admin'}.\n\nPriority: ${task.priority}\nDue Date: ${new Date(task.dueDate).toDateString()}\n\nPlease log in to Task Manager to view the details.\n\nBest regards,\nTask Manager Team`
+                    }).catch(err => console.error('[Email] Re-assign email failed:', err));
+                }
+            }
+
+            // Old assignee was removed (unassigned)
+            if (oldAssigneeId && !newAssigneeId && oldAssigneeId !== actorId) {
+                const [oldAssignee, actor] = await Promise.all([
+                    User.findById(oldAssigneeId).select('email fullName').lean(),
+                    User.findById(actorId).select('fullName').lean()
+                ]);
+                if (oldAssignee && oldAssignee.email) {
+                    sendProjectEmail({
+                        to: oldAssignee.email,
+                        subject: `Task Manager — You have been unassigned from: "${task.title}"`,
+                        text: `Hi ${oldAssignee.fullName || 'there'},\n\nYou have been removed from the task "${task.title}" by ${actor?.fullName || 'an admin'}.\n\nBest regards,\nTask Manager Team`
+                    }).catch(err => console.error('[Email] Unassign email failed:', err));
+                }
+            }
+        }
+
+        // Email: Task Completed — notify task creator/admin when task marked as done
+        if (previousStatus !== 'done' && task.status === 'done' && !requireApproval) {
+            const creatorId = task.userId ? task.userId.toString() : null;
+            const actorId = req.user.id.toString();
+            // Only notify if someone else (not the creator themselves) completed it
+            if (creatorId && creatorId !== actorId) {
+                const [creator, completer] = await Promise.all([
+                    User.findById(creatorId).select('email fullName').lean(),
+                    User.findById(actorId).select('fullName').lean()
+                ]);
+                if (creator && creator.email) {
+                    sendProjectEmail({
+                        to: creator.email,
+                        subject: `Task Manager — Task Completed: "${task.title}"`,
+                        text: `Hi ${creator.fullName || 'there'},\n\nGreat news! The task "${task.title}" has been marked as completed by ${completer?.fullName || 'a team member'}.\n\nCompleted On: ${new Date().toDateString()}\n\nPlease log in to Task Manager to review the work.\n\nBest regards,\nTask Manager Team`
+                    }).catch(err => console.error('[Email] Task completed email failed:', err));
+                }
+            }
+
+            // Also notify all project admins (excluding the actor)
+            const adminMembers = project.members.filter(m => m.role === 'admin' && m.userId.toString() !== actorId);
+            if (adminMembers.length > 0) {
+                const adminUsers = await User.find({
+                    _id: { $in: adminMembers.map(m => m.userId) }
+                }).select('email fullName').lean();
+
+                const completer = await User.findById(actorId).select('fullName').lean();
+                for (const admin of adminUsers) {
+                    if (admin.email && admin._id.toString() !== creatorId) { // skip if admin is already the creator
+                        sendProjectEmail({
+                            to: admin.email,
+                            subject: `Task Manager — Task Completed: "${task.title}"`,
+                            text: `Hi ${admin.fullName || 'there'},\n\nThe task "${task.title}" in project "${project.name}" has been marked as completed by ${completer?.fullName || 'a team member'}.\n\nCompleted On: ${new Date().toDateString()}\n\nPlease log in to Task Manager to review.\n\nBest regards,\nTask Manager Team`
+                        }).catch(err => console.error('[Email] Admin task completed email failed:', err));
+                    }
+                }
+            }
+        }
+
+        // Email: Task Blocked — notify project admins when new blockedBy dependencies are added
+        if (taskData.blockedBy !== undefined && Array.isArray(taskData.blockedBy) && taskData.blockedBy.length > 0) {
+            const previousBlockedBy = (previousBlockedByIds || []).map(id => id.toString());
+            const newlyBlocked = taskData.blockedBy.filter(id => !previousBlockedBy.includes(id.toString()));
+
+            if (newlyBlocked.length > 0) {
+                const [blocker, adminMembers] = await Promise.all([
+                    User.findById(req.user.id).select('fullName').lean(),
+                    User.find({
+                        _id: { $in: project.members.filter(m => m.role === 'admin').map(m => m.userId) }
+                    }).select('email fullName').lean()
+                ]);
+
+                const blockerNames = await Task.find({ _id: { $in: newlyBlocked } }).select('title').lean();
+                const blockingTitles = blockerNames.map(t => `"${t.title}"`).join(', ');
+
+                for (const admin of adminMembers) {
+                    if (admin.email) {
+                        sendProjectEmail({
+                            to: admin.email,
+                            subject: `Task Manager — Task Blocked: "${task.title}"`,
+                            text: `Hi ${admin.fullName || 'there'},\n\nA task in project "${project.name}" has been marked as blocked.\n\nBlocked Task: "${task.title}"\nBlocked By: ${blockingTitles}\nReported By: ${blocker?.fullName || 'A team member'}\n\nPlease log in to Task Manager to resolve the dependency.\n\nBest regards,\nTask Manager Team`
+                        }).catch(err => console.error('[Email] Task blocked email failed:', err));
+                    }
+                }
+            }
+        }
 
         // Auto-create next occurrence for recurring tasks when task is completed.
         if (previousStatus !== 'done' && task.status === 'done' && task.recurrence?.enabled && task.recurrence?.frequency) {
@@ -717,6 +839,22 @@ router.post('/:id/comments', async (req, res) => {
         });
         await task.save();
         emitProjectTaskEvent(req, task.projectId, 'updated', task);
+
+        // Email: Comment notification to assignee (if commenter is not the assignee)
+        if (task.assigneeId && task.assigneeId.toString() !== req.user.id.toString()) {
+            const [assignee, commenter] = await Promise.all([
+                User.findById(task.assigneeId).select('email fullName').lean(),
+                User.findById(req.user.id).select('fullName').lean()
+            ]);
+            if (assignee && assignee.email) {
+                sendProjectEmail({
+                    to: assignee.email,
+                    subject: `Task Manager — New Comment on Your Task: "${task.title}"`,
+                    text: `Hi ${assignee.fullName || 'there'},\n\n${commenter?.fullName || 'Someone'} added a comment on the task "${task.title}":\n\n"${text.trim()}"\n\nPlease log in to Task Manager to reply.\n\nBest regards,\nTask Manager Team`
+                }).catch(err => console.error('[Email] Comment email failed:', err));
+            }
+        }
+
         res.status(201).json(task);
     } catch (error) {
         console.error(error.message);

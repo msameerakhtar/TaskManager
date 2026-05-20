@@ -104,7 +104,7 @@ const Profile = () => {
                             Role
                         </Typography>
                         <Typography variant="body2" sx={{ color: 'text.primary', fontWeight: 700 }}>
-                            Administrator
+                            User
                         </Typography>
                     </Box>
                 </Box>

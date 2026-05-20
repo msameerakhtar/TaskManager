@@ -348,6 +348,9 @@ router.get('/:id/member-stats', async (req, res) => {
         // Overall stats
         const totalTasks = await Task.countDocuments(matchStage);
         const pendingTasks = await Task.countDocuments({ ...matchStage, status: { $ne: 'done' } });
+        const completedTasks = await Task.countDocuments({ ...matchStage, status: 'done' });
+        const now = new Date();
+        const overdueTasks = await Task.countDocuments({ ...matchStage, status: { $ne: 'done' }, dueDate: { $lt: now } });
 
         // Task Status Distribution
         const statusRaw = await Task.aggregate([
@@ -380,6 +383,8 @@ router.get('/:id/member-stats', async (req, res) => {
         res.json({
             totalTasks,
             pendingTasks,
+            completedTasks,
+            overdueTasks,
             taskData,
             priorityData
         });

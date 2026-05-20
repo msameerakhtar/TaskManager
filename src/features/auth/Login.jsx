@@ -13,6 +13,7 @@ import { authApi } from '../../api/authApi';
 import { useDispatch } from 'react-redux';
 import { login } from '../auth/authSlice';
 import OtpVerification from './OtpVerification';
+import { useGoogleReCaptcha } from 'react-google-recaptcha-v3';
 
 const Login = ({ mode, setMode }) => {
   const theme = useTheme();
@@ -26,6 +27,7 @@ const Login = ({ mode, setMode }) => {
   
   const navigate = useNavigate();
   const dispatch = useDispatch();
+  const { executeRecaptcha } = useGoogleReCaptcha();
 
   const loginMutation = useMutation({
     mutationFn: (data) => authApi.login(data).then(res => res.data),
@@ -56,17 +58,17 @@ const Login = ({ mode, setMode }) => {
     setError('');
 
     // Get reCAPTCHA v3 token silently
-    // let recaptchaToken = '';
-    // if (executeRecaptcha) {
-    //   recaptchaToken = await executeRecaptcha('login');
-    // }
+    let recaptchaToken = '';
+    if (executeRecaptcha) {
+      recaptchaToken = await executeRecaptcha('login');
+    }
 
     loginMutation.mutate({
       email: email.trim(),
       password,
-      // recaptchaToken,
+      recaptchaToken,
     });
-  }, [email, password, /* executeRecaptcha, */ loginMutation]);
+  }, [email, password, executeRecaptcha, loginMutation]);
 
   const handleVerificationSuccess = (data) => {
     dispatch(login({ user: data.user, token: data.token }));
@@ -174,6 +176,12 @@ const Login = ({ mode, setMode }) => {
                 >
                   {loading ? <CustomLoader size={24} sx={{ color: '#fff' }} /> : 'Sign In'}
                 </Button>
+
+                <Typography variant="caption" sx={{ display: 'block', mt: 2, color: 'text.secondary', fontSize: '0.75rem', lineHeight: 1.5 }}>
+                  This site is protected by reCAPTCHA and the Google{' '}
+                  <Link href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer">Privacy Policy</Link> and{' '}
+                  <Link href="https://policies.google.com/terms" target="_blank" rel="noopener noreferrer">Terms of Service</Link> apply.
+                </Typography>
               </form>
               
               <Typography sx={{ mt: 4, color: 'text.secondary' }}>

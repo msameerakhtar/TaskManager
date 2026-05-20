@@ -21,7 +21,9 @@ dotenv.config();
 const app = express();
 app.set('trust proxy', 1);
 const httpServer = http.createServer(app);
-const CORS_ORIGIN = process.env.CORS_ORIGIN || 'http://localhost:5173';
+const CORS_ORIGIN = process.env.CORS_ORIGIN 
+    ? process.env.CORS_ORIGIN.split(',') 
+    : ['http://localhost:5173', 'http://localhost:4173'];
 
 const io = new Server(httpServer, {
     cors: {

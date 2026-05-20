@@ -110,23 +110,22 @@ const MemberDashboard = () => {
         </Paper>
       ) : (
         <>
-          <Grid container spacing={3} sx={{ mb: 4 }}>
-              <Grid size={{ xs: 12, md: 6 }}>
-              <Card elevation={2} sx={{ borderRadius: 3, height: '100%' }}>
-                  <CardContent>
-                  <Typography color="text.secondary" gutterBottom>My Total Tasks</Typography>
-                  <Typography variant="h3" fontWeight={700} color="primary.main">{stats.totalTasks}</Typography>
-                  </CardContent>
-              </Card>
-              </Grid>
-              <Grid size={{ xs: 12, md: 6 }}>
-              <Card elevation={2} sx={{ borderRadius: 3, height: '100%' }}>
-                  <CardContent>
-                  <Typography color="text.secondary" gutterBottom>Pending Tasks</Typography>
-                  <Typography variant="h3" fontWeight={700} color="warning.main">{stats.pendingTasks}</Typography>
-                  </CardContent>
-              </Card>
-              </Grid>
+          <Grid container spacing={2} sx={{ mb: 4 }}>
+            {[
+              { title: 'Total Tasks', value: stats.totalTasks || 0, color: theme.palette.info.main, bg: isDark ? 'rgba(2, 136, 209, 0.1)' : '#e0f2fe' },
+              { title: 'Pending', value: stats.pendingTasks || 0, color: theme.palette.warning.main, bg: isDark ? 'rgba(237, 108, 2, 0.1)' : '#fef08a' },
+              { title: 'Completed', value: stats.completedTasks || 0, color: theme.palette.success.main, bg: isDark ? 'rgba(46, 125, 50, 0.1)' : '#dcfce7' },
+              { title: 'Overdue', value: stats.overdueTasks || 0, color: theme.palette.error.main, bg: isDark ? 'rgba(211, 47, 47, 0.1)' : '#fee2e2' }
+            ].map((kpi, index) => (
+                <Grid size={{ xs: 6, md: 3 }} key={index}>
+                    <Card elevation={0} sx={{ borderRadius: '16px', bgcolor: kpi.bg, border: `1px solid ${kpi.color}33`, transition: 'transform 0.2s', '&:hover': { transform: 'translateY(-4px)' } }}>
+                        <CardContent sx={{ textAlign: 'center', p: 3 }}>
+                            <Typography variant="body2" sx={{ color: 'text.secondary', fontWeight: 600, mb: 1, textTransform: 'uppercase', letterSpacing: 1 }}>{kpi.title}</Typography>
+                            <Typography variant="h3" sx={{ fontWeight: 900, color: kpi.color }}>{kpi.value}</Typography>
+                        </CardContent>
+                    </Card>
+                </Grid>
+            ))}
           </Grid>
 
           {/* Charts Section */}
