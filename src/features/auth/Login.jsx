@@ -12,32 +12,41 @@ import { useMutation } from '@tanstack/react-query';
 import { authApi } from '../../api/authApi';
 import { useDispatch } from 'react-redux';
 import { login } from '../auth/authSlice';
-// import { useGoogleReCaptcha } from 'react-google-recaptcha-v3';
+import OtpVerification from './OtpVerification';
+import { useGoogleReCaptcha } from 'react-google-recaptcha-v3';
 
 const Login = ({ mode, setMode }) => {
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
-  
-  // const { executeRecaptcha } = useGoogleReCaptcha();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
+  const [verificationEmail, setVerificationEmail] = useState('');
   
   const navigate = useNavigate();
   const dispatch = useDispatch();
+  const { executeRecaptcha } = useGoogleReCaptcha();
 
   const loginMutation = useMutation({
     mutationFn: (data) => authApi.login(data).then(res => res.data),
     onSuccess: ({ token, user }) => {
       if (token) {
         dispatch(login({ user, token }));
-        navigate('/tasks', { replace: true });
+        if (user?.systemRole === 'superadmin') {
+          navigate('/admin/overview', { replace: true });
+        } else {
+          navigate('/tasks', { replace: true });
+        }
       }
     },
     onError: (err) => {
-      setError(err.response?.data?.message || "An unexpected error occurred.");
+      if (err.response?.data?.isVerified === false) {
+        setVerificationEmail(err.response.data.email);
+      } else {
+        setError(err.response?.data?.message || "An unexpected error occurred.");
+      }
     },
   });
 
@@ -49,17 +58,26 @@ const Login = ({ mode, setMode }) => {
     setError('');
 
     // Get reCAPTCHA v3 token silently
-    // let recaptchaToken = '';
-    // if (executeRecaptcha) {
-    //   recaptchaToken = await executeRecaptcha('login');
-    // }
+    let recaptchaToken = '';
+    if (executeRecaptcha) {
+      recaptchaToken = await executeRecaptcha('login');
+    }
 
     loginMutation.mutate({
       email: email.trim(),
       password,
-      // recaptchaToken,
+      recaptchaToken,
     });
-  }, [email, password, /* executeRecaptcha, */ loginMutation]);
+  }, [email, password, executeRecaptcha, loginMutation]);
+
+  const handleVerificationSuccess = (data) => {
+    dispatch(login({ user: data.user, token: data.token }));
+    if (data.user?.systemRole === 'superadmin') {
+      navigate('/admin/overview', { replace: true });
+    } else {
+      navigate('/tasks', { replace: true });
+    }
+  };
 
   return (
     <Box sx={{ 
@@ -103,61 +121,77 @@ const Login = ({ mode, setMode }) => {
             boxShadow: isDark ? '0 20px 40px rgba(0,0,0,0.4)' : '0 20px 40px rgba(0,0,0,0.1)',
           }
         }}>
-          <Typography variant="h4" fontWeight="900" sx={{ color: 'text.primary', mb: 1, letterSpacing: '-1px' }}>Login</Typography>
-          <Typography variant="body2" sx={{ color: 'text.secondary', mb: 4 }}>Please enter your details to sign in</Typography>
-          
-          {error && (
-            <Alert severity="error" sx={{ mb: 3, borderRadius: '12px', bgcolor: 'error.main' + '1A', color: 'error.main' }}>
-              {error}
-            </Alert>
+          {verificationEmail ? (
+            <OtpVerification 
+              email={verificationEmail} 
+              onSuccess={handleVerificationSuccess} 
+              onCancel={() => setVerificationEmail('')} 
+            />
+          ) : (
+            <>
+              <Typography variant="h4" fontWeight="900" sx={{ color: 'text.primary', mb: 1, letterSpacing: '-1px' }}>Login</Typography>
+              <Typography variant="body2" sx={{ color: 'text.secondary', mb: 4 }}>Please enter your details to sign in</Typography>
+              
+              {error && (
+                <Alert severity="error" sx={{ mb: 3, borderRadius: '12px', bgcolor: 'error.main' + '1A', color: 'error.main' }}>
+                  {error}
+                </Alert>
+              )}
+              
+              <form onSubmit={handleLogin} noValidate>
+                <TextField 
+                  fullWidth label="Email Address" margin="normal" variant="filled"
+                  value={email} onChange={(e) => setEmail(e.target.value)}
+                  sx={{ 
+                    '& .MuiFilledInput-root': { bgcolor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)', borderRadius: '12px', color: 'text.primary' },
+                    '& .MuiFilledInput-underline:before': { borderBottom: 'none' },
+                    mb: 1
+                  }}
+                />
+                <TextField 
+                  fullWidth label="Password" type={showPassword ? 'text' : 'password'}
+                  margin="normal" variant="filled" value={password} onChange={(e) => setPassword(e.target.value)}
+                  sx={{ 
+                    '& .MuiFilledInput-root': { bgcolor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)', borderRadius: '12px', color: 'text.primary' },
+                    '& .MuiFilledInput-underline:before': { borderBottom: 'none' },
+                    mb: 2
+                  }}
+                  InputProps={{
+                    endAdornment: (
+                      <InputAdornment position="end">
+                        <IconButton onClick={() => setShowPassword(!showPassword)} edge="end">
+                          {showPassword ? <VisibilityOff /> : <Visibility />}
+                        </IconButton>
+                      </InputAdornment>
+                    ),
+                  }}
+                />
+                <Button 
+                  fullWidth variant="contained" type="submit" disabled={loading} 
+                  sx={{ 
+                    mt: 2, py: 1.8, borderRadius: '14px', fontWeight: 'bold', textTransform: 'none',
+                    background: `linear-gradient(45deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,
+                    boxShadow: `0 10px 20px ${theme.palette.primary.main}4D`
+                  }}
+                >
+                  {loading ? <CustomLoader size={24} sx={{ color: '#fff' }} /> : 'Sign In'}
+                </Button>
+
+                <Typography variant="caption" sx={{ display: 'block', mt: 2, color: 'text.secondary', fontSize: '0.75rem', lineHeight: 1.5 }}>
+                  This site is protected by reCAPTCHA and the Google{' '}
+                  <Link href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer">Privacy Policy</Link> and{' '}
+                  <Link href="https://policies.google.com/terms" target="_blank" rel="noopener noreferrer">Terms of Service</Link> apply.
+                </Typography>
+              </form>
+              
+              <Typography sx={{ mt: 4, color: 'text.secondary' }}>
+                New here?{' '}
+                <Link component={RouterLink} to="/signup" sx={{ color: 'primary.main', fontWeight: 'bold', textDecoration: 'none' }}>
+                  Create an account
+                </Link>
+              </Typography>
+            </>
           )}
-          
-          <form onSubmit={handleLogin} noValidate>
-            <TextField 
-              fullWidth label="Email Address" margin="normal" variant="filled"
-              value={email} onChange={(e) => setEmail(e.target.value)}
-              sx={{ 
-                '& .MuiFilledInput-root': { bgcolor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)', borderRadius: '12px', color: 'text.primary' },
-                '& .MuiFilledInput-underline:before': { borderBottom: 'none' },
-                mb: 1
-              }}
-            />
-            <TextField 
-              fullWidth label="Password" type={showPassword ? 'text' : 'password'}
-              margin="normal" variant="filled" value={password} onChange={(e) => setPassword(e.target.value)}
-              sx={{ 
-                '& .MuiFilledInput-root': { bgcolor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)', borderRadius: '12px', color: 'text.primary' },
-                '& .MuiFilledInput-underline:before': { borderBottom: 'none' },
-                mb: 2
-              }}
-              InputProps={{
-                endAdornment: (
-                  <InputAdornment position="end">
-                    <IconButton onClick={() => setShowPassword(!showPassword)} edge="end">
-                      {showPassword ? <VisibilityOff /> : <Visibility />}
-                    </IconButton>
-                  </InputAdornment>
-                ),
-              }}
-            />
-            <Button 
-              fullWidth variant="contained" type="submit" disabled={loading} 
-              sx={{ 
-                mt: 2, py: 1.8, borderRadius: '14px', fontWeight: 'bold', textTransform: 'none',
-                background: `linear-gradient(45deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,
-                boxShadow: `0 10px 20px ${theme.palette.primary.main}4D`
-              }}
-            >
-              {loading ? <CustomLoader size={24} sx={{ color: '#fff' }} /> : 'Sign In'}
-            </Button>
-          </form>
-          
-          <Typography sx={{ mt: 4, color: 'text.secondary' }}>
-            New here?{' '}
-            <Link component={RouterLink} to="/signup" sx={{ color: 'primary.main', fontWeight: 'bold', textDecoration: 'none' }}>
-              Create an account
-            </Link>
-          </Typography>
         </Paper>
       </Container>
     </Box>

@@ -14,13 +14,16 @@ const InsightsPanel = React.memo(({
   workloadReady,
   workloadError,
   selectedProject,
-  isDark
+  isDark,
+  isAdmin
 }) => {
+  if (!isAdmin && !calendarLinks) return null;
+
   return (
     <Grid container spacing={3} sx={{ mb: 4 }}>
-      <Grid size={{ xs: 12, md: 7 }}>
+      <Grid size={{ xs: 12, md: isAdmin ? 7 : 12 }}>
         <Stack spacing={3}>
-          {insights?.summary && (
+          {isAdmin && insights?.summary && (
             <Paper elevation={0} sx={{ p: 3, borderRadius: '16px', border: '1px solid', borderColor: 'divider' }}>
               <Typography variant="h6" sx={{ fontWeight: 800, mb: 2 }}>Productivity Insights</Typography>
               <Grid container spacing={2}>
@@ -59,36 +62,38 @@ const InsightsPanel = React.memo(({
         </Stack>
       </Grid>
 
-      <Grid size={{ xs: 12, md: 5 }}>
-        {selectedProject && (
-          <Paper elevation={0} sx={{ p: 3, borderRadius: '16px', border: '1px solid', borderColor: 'divider', height: '100%' }}>
-            <Typography variant="h6" sx={{ fontWeight: 800, mb: 2 }}>Team Workload</Typography>
-            {!workloadReady ? (
-              <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}><CustomLoader size={30} /></Box>
-            ) : workloadError ? (
-              <Alert severity="warning">{workloadError}</Alert>
-            ) : workloadData.length === 0 ? (
-              <Typography variant="body2" color="text.secondary">No workload data available. Invite members and assign tasks.</Typography>
-            ) : (
-              <Stack spacing={2}>
-                {workloadData.map((member, idx) => (
-                  <Box key={idx} sx={{ p: 2, bgcolor: isDark ? 'rgba(255,255,255,0.03)' : '#f8fafc', borderRadius: '12px' }}>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                      <Typography variant="subtitle2" fontWeight="bold">{member.name}</Typography>
-                      <Typography variant="caption" color="text.secondary" sx={{ textTransform: 'capitalize' }}>{member.role}</Typography>
+      {isAdmin && (
+        <Grid size={{ xs: 12, md: 5 }}>
+          {selectedProject && (
+            <Paper elevation={0} sx={{ p: 3, borderRadius: '16px', border: '1px solid', borderColor: 'divider', height: '100%' }}>
+              <Typography variant="h6" sx={{ fontWeight: 800, mb: 2 }}>Team Workload</Typography>
+              {!workloadReady ? (
+                <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}><CustomLoader size={30} /></Box>
+              ) : workloadError ? (
+                <Alert severity="warning">{workloadError}</Alert>
+              ) : workloadData.length === 0 ? (
+                <Typography variant="body2" color="text.secondary">No workload data available. Invite members and assign tasks.</Typography>
+              ) : (
+                <Stack spacing={2}>
+                  {workloadData.map((member, idx) => (
+                    <Box key={idx} sx={{ p: 2, bgcolor: isDark ? 'rgba(255,255,255,0.03)' : '#f8fafc', borderRadius: '12px' }}>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                        <Typography variant="subtitle2" fontWeight="bold">{member.name}</Typography>
+                        <Typography variant="caption" color="text.secondary" sx={{ textTransform: 'capitalize' }}>{member.role}</Typography>
+                      </Box>
+                      <Stack direction="row" spacing={1}>
+                        <Chip size="small" label={`${member.activeTasks} tasks`} sx={{ bgcolor: 'background.paper' }} />
+                        <Chip size="small" label={`${member.estimatedHours} hrs`} sx={{ bgcolor: 'background.paper' }} />
+                        {member.overloaded && <Chip size="small" color="error" label="Overloaded" />}
+                      </Stack>
                     </Box>
-                    <Stack direction="row" spacing={1}>
-                      <Chip size="small" label={`${member.activeTasks} tasks`} sx={{ bgcolor: 'background.paper' }} />
-                      <Chip size="small" label={`${member.estimatedHours} hrs`} sx={{ bgcolor: 'background.paper' }} />
-                      {member.overloaded && <Chip size="small" color="error" label="Overloaded" />}
-                    </Stack>
-                  </Box>
-                ))}
-              </Stack>
-            )}
-          </Paper>
-        )}
-      </Grid>
+                  ))}
+                </Stack>
+              )}
+            </Paper>
+          )}
+        </Grid>
+      )}
     </Grid>
   );
 });

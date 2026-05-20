@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
     Modal, Box, Typography, TextField, Button, 
     Stack, Avatar, IconButton, Alert, Snackbar,
@@ -16,6 +16,7 @@ import { authApi } from '../../api/authApi';
 import { useDispatch, useSelector } from 'react-redux';
 import { updateUser } from './authSlice';
 import CustomLoader from '../../components/CustomLoader';
+import { getOptimizedImageUrl } from '../../utils/imageHelper';
 
 const ProfileUpdateModal = ({ open, handleClose }) => {
     const theme = useTheme();
@@ -25,6 +26,8 @@ const ProfileUpdateModal = ({ open, handleClose }) => {
 
     const [fullName, setFullName] = useState(user?.fullName || '');
     const [avatarUrl, setAvatarUrl] = useState(user?.avatarUrl || '');
+    const [selectedFile, setSelectedFile] = useState(null);
+    const [previewUrl, setPreviewUrl] = useState(user?.avatarUrl || '');
     const [oldPassword, setOldPassword] = useState('');
     const [newPassword, setNewPassword] = useState('');
     const [showPasswords, setShowPasswords] = useState(false);
@@ -33,6 +36,15 @@ const ProfileUpdateModal = ({ open, handleClose }) => {
     const [uploading, setUploading] = useState(false);
     const [pwdLoading, setPwdLoading] = useState(false);
     const [feedback, setFeedback] = useState({ open: false, message: '', severity: 'success' });
+
+    useEffect(() => {
+        if (open && user) {
+            setFullName(user.fullName || '');
+            setAvatarUrl(user.avatarUrl || '');
+            setPreviewUrl(user.avatarUrl || '');
+            setSelectedFile(null);
+        }
+    }, [open, user]);
 
     const modalStyle = {
         position: 'absolute',
@@ -51,36 +63,39 @@ const ProfileUpdateModal = ({ open, handleClose }) => {
         scrollbarWidth: 'none',
     };
 
-    const handleFileUpload = async (e) => {
+    const handleFileUpload = (e) => {
         const file = e.target.files[0];
         if (!file) return;
 
-        setUploading(true);
-        const formData = new FormData();
-        formData.append('avatar', file);
-
-        try {
-            const response = await authApi.uploadAvatar(formData);
-            setAvatarUrl(response.data.avatarUrl);
-            setFeedback({ open: true, message: 'Image uploaded! Don\'t forget to save changes.', severity: 'info' });
-        } catch (error) {
-            setFeedback({ open: true, message: 'Upload failed', severity: 'error' });
-        } finally {
-            setUploading(false);
-        }
+        setSelectedFile(file);
+        const localUrl = URL.createObjectURL(file);
+        setPreviewUrl(localUrl);
     };
 
     const handleUpdateProfile = async (e) => {
         e.preventDefault();
         setLoading(true);
         try {
-            const response = await authApi.updateProfile({ fullName, avatarUrl });
+            let finalAvatarUrl = avatarUrl;
+            if (selectedFile) {
+                setUploading(true);
+                const formData = new FormData();
+                formData.append('avatar', selectedFile);
+                const response = await authApi.uploadAvatar(formData);
+                finalAvatarUrl = response.data.avatarUrl;
+                setAvatarUrl(finalAvatarUrl);
+            }
+            const response = await authApi.updateProfile({ fullName, avatarUrl: finalAvatarUrl });
             dispatch(updateUser(response.data));
             setFeedback({ open: true, message: 'Profile updated successfully!', severity: 'success' });
+            setTimeout(() => {
+                handleClose();
+            }, 1000);
         } catch (error) {
             setFeedback({ open: true, message: error.response?.data?.message || 'Update failed', severity: 'error' });
         } finally {
             setLoading(false);
+            setUploading(false);
         }
     };
 
@@ -116,7 +131,7 @@ const ProfileUpdateModal = ({ open, handleClose }) => {
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 1 }}>
                                 <Box sx={{ position: 'relative' }}>
                                     <Avatar 
-                                        src={avatarUrl} 
+                                        src={previewUrl?.startsWith('blob:') ? previewUrl : getOptimizedImageUrl(previewUrl, { width: 150, height: 150 })} 
                                         sx={{ 
                                             width: 72, 
                                             height: 72, 
@@ -128,7 +143,7 @@ const ProfileUpdateModal = ({ open, handleClose }) => {
                                         }}
                                         onClick={() => document.getElementById('avatar-upload').click()}
                                     >
-                                        {fullName.charAt(0).toUpperCase()}
+                                        {fullName ? fullName.charAt(0).toUpperCase() : 'U'}
                                     </Avatar>
                                     {uploading && (
                                         <Box sx={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: 'rgba(0,0,0,0.3)', borderRadius: '50%' }}>
@@ -144,14 +159,8 @@ const ProfileUpdateModal = ({ open, handleClose }) => {
                                     />
                                 </Box>
                                 <Stack spacing={0.5} sx={{ flexGrow: 1 }}>
-                                    <TextField 
-                                        label="Avatar URL" 
-                                        fullWidth size="small" 
-                                        value={avatarUrl} 
-                                        onChange={(e) => setAvatarUrl(e.target.value)} 
-                                        placeholder="Or paste URL here"
-                                    />
-                                    <Typography variant="caption" color="text.secondary">Click avatar to upload from computer</Typography>
+                                    <Typography variant="subtitle2" fontWeight="700">Profile Picture</Typography>
+                                    <Typography variant="caption" color="text.secondary">Click avatar to upload from your computer</Typography>
                                 </Stack>
                             </Box>
                             <TextField 

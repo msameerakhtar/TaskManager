@@ -2,13 +2,29 @@ import React, { useState, useCallback, useMemo } from 'react';
 import {
     Modal, Box, Typography, TextField, Button,
     Stack, Backdrop, Fade, MenuItem,
-    Snackbar, Alert, useTheme
+    Snackbar, Alert, useTheme, List, ListItem, ListItemText, IconButton, Divider, Autocomplete, Chip
 } from '@mui/material';
+import { createFilterOptions } from '@mui/material/Autocomplete';
+import DeleteIcon from '@mui/icons-material/Delete';
 import CustomLoader from '../../components/CustomLoader';
 import { taskApi } from '../../api/taskApi';
 import { useSelector } from 'react-redux';
 
-const CreateTask = ({ open, handleClose, refreshTasks, selectedProjectId, projectMembers = [] }) => {
+const filter = createFilterOptions();
+
+const LABEL_OPTIONS = [
+    { text: 'Bug', color: '#ef4444' },
+    { text: 'Feature', color: '#3b82f6' },
+    { text: 'Design', color: '#ec4899' },
+    { text: 'Marketing', color: '#f59e0b' },
+    { text: 'Urgent', color: '#dc2626' },
+    { text: 'Backend', color: '#10b981' },
+    { text: 'Frontend', color: '#06b6d4' }
+];
+const PRESET_COLORS = ['#ef4444', '#3b82f6', '#ec4899', '#f59e0b', '#10b981', '#06b6d4', '#8b5cf6', '#6366f1'];
+const getRandomColor = () => PRESET_COLORS[Math.floor(Math.random() * PRESET_COLORS.length)];
+
+const CreateTask = ({ open, handleClose, refreshTasks, selectedProjectId, projectMembers = [], allTasks = [] }) => {
     const theme = useTheme();
     const isDark = theme.palette.mode === 'dark';
     const token = useSelector((state) => state.auth.token); // kept for auth-guard check only
@@ -28,6 +44,20 @@ const CreateTask = ({ open, handleClose, refreshTasks, selectedProjectId, projec
     const [loading, setLoading] = useState(false);
     const [feedback, setFeedback] = useState({ open: false, message: '', severity: 'success' });
     const [suggestionLoading, setSuggestionLoading] = useState(false);
+    const [subtasks, setSubtasks] = useState([]);
+    const [newSubtask, setNewSubtask] = useState('');
+    const [blockedBy, setBlockedBy] = useState([]);
+    const [selectedLabels, setSelectedLabels] = useState([]);
+
+    const handleAddSubtask = () => {
+        if (!newSubtask.trim()) return;
+        setSubtasks(prev => [...prev, { title: newSubtask.trim(), isCompleted: false }]);
+        setNewSubtask('');
+    };
+
+    const handleRemoveSubtask = (index) => {
+        setSubtasks(prev => prev.filter((_, i) => i !== index));
+    };
 
     const modalStyle = useMemo(() => ({
         position: 'absolute',
@@ -101,7 +131,10 @@ const CreateTask = ({ open, handleClose, refreshTasks, selectedProjectId, projec
                     : { enabled: false },
                 notes: formData.initialNote.trim()
                     ? [{ content: formData.initialNote.trim() }]
-                    : []
+                    : [],
+                subtasks: subtasks.length > 0 ? subtasks : undefined,
+                blockedBy: blockedBy.length > 0 ? blockedBy.map(t => t.id) : undefined,
+                labels: selectedLabels.length > 0 ? selectedLabels : undefined
             };
 
             await taskApi.createTask(payload);
@@ -118,6 +151,9 @@ const CreateTask = ({ open, handleClose, refreshTasks, selectedProjectId, projec
                 assigneeId: '',
                 estimatedHours: 2
             });
+            setSubtasks([]);
+            setBlockedBy([]);
+            setSelectedLabels([]);
             refreshTasks();
             setFeedback({ open: true, message: 'Task Added Successfully!', severity: 'success' });
 
@@ -340,6 +376,136 @@ const CreateTask = ({ open, handleClose, refreshTasks, selectedProjectId, projec
                                         <MenuItem value="monthly">Monthly</MenuItem>
                                     </TextField>
                                 )}
+
+                                <Autocomplete
+                                    multiple
+                                    freeSolo
+                                    options={LABEL_OPTIONS}
+                                    getOptionLabel={(option) => {
+                                        if (typeof option === 'string') return option;
+                                        if (option.inputValue) return option.inputValue;
+                                        return option.text;
+                                    }}
+                                    value={selectedLabels}
+                                    onChange={(event, newValue) => {
+                                        const parsedValue = newValue.map(item => {
+                                            if (typeof item === 'string') {
+                                                return { text: item, color: getRandomColor() };
+                                            } else if (item.inputValue) {
+                                                return { text: item.inputValue, color: getRandomColor() };
+                                            }
+                                            return item;
+                                        });
+                                        const uniqueLabels = parsedValue.filter((v, i, a) => a.findIndex(t => (t.text === v.text)) === i);
+                                        setSelectedLabels(uniqueLabels);
+                                    }}
+                                    filterOptions={(options, params) => {
+                                        const filtered = filter(options, params);
+                                        const { inputValue } = params;
+                                        const isExisting = options.some((option) => inputValue === option.text);
+                                        if (inputValue !== '' && !isExisting) {
+                                            filtered.push({
+                                                inputValue,
+                                                text: `Add "${inputValue}"`,
+                                            });
+                                        }
+                                        return filtered;
+                                    }}
+                                    renderTags={(value, getTagProps) =>
+                                        value.map((option, index) => (
+                                            <Chip
+                                                key={index}
+                                                label={option.text}
+                                                size="small"
+                                                sx={{ 
+                                                    bgcolor: option.color + '22',
+                                                    color: option.color,
+                                                    fontWeight: 700,
+                                                    border: `1px solid ${option.color}40`
+                                                }}
+                                                {...getTagProps({ index })}
+                                            />
+                                        ))
+                                    }
+                                    renderInput={(params) => (
+                                        <TextField
+                                            {...params}
+                                            label="Labels / Custom Tags"
+                                            placeholder="Select or type..."
+                                            sx={textFieldStyle}
+                                        />
+                                    )}
+                                    disabled={loading}
+                                />
+
+                                <Autocomplete
+                                    multiple
+                                    options={allTasks.filter(t => t.status !== 'done')}
+                                    getOptionLabel={(option) => option.title || 'Untitled Task'}
+                                    value={blockedBy}
+                                    onChange={(event, newValue) => setBlockedBy(newValue)}
+                                    renderTags={(value, getTagProps) =>
+                                        value.map((option, index) => (
+                                            <Chip variant="outlined" size="small" label={option.title} {...getTagProps({ index })} />
+                                        ))
+                                    }
+                                    renderInput={(params) => (
+                                        <TextField
+                                            {...params}
+                                            label="Blocked By (Dependencies)"
+                                            placeholder="Select tasks..."
+                                            sx={textFieldStyle}
+                                        />
+                                    )}
+                                    disabled={loading}
+                                />
+
+                                <Divider />
+                                <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>Subtasks (Checklist)</Typography>
+                                <Box sx={{ display: 'flex', gap: 1 }}>
+                                    <TextField
+                                        label="New Subtask"
+                                        value={newSubtask}
+                                        onChange={(e) => setNewSubtask(e.target.value)}
+                                        fullWidth
+                                        size="small"
+                                        disabled={loading}
+                                        sx={textFieldStyle}
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Enter') {
+                                                e.preventDefault();
+                                                handleAddSubtask();
+                                            }
+                                        }}
+                                    />
+                                    <Button
+                                        variant="contained"
+                                        onClick={handleAddSubtask}
+                                        disabled={loading || !newSubtask.trim()}
+                                        sx={{ textTransform: 'none', px: 3, borderRadius: '12px' }}
+                                    >
+                                        Add
+                                    </Button>
+                                </Box>
+                                {subtasks.length > 0 && (
+                                    <List dense sx={{ bgcolor: 'background.default', borderRadius: '12px', p: 1, mt: 1 }}>
+                                        {subtasks.map((subtask, index) => (
+                                            <ListItem 
+                                                key={index} 
+                                                disablePadding 
+                                                secondaryAction={
+                                                    <IconButton edge="end" aria-label="delete" size="small" color="error" onClick={() => handleRemoveSubtask(index)}>
+                                                        <DeleteIcon fontSize="small" />
+                                                    </IconButton>
+                                                }
+                                            >
+                                                <ListItemText primary={subtask.title} />
+                                            </ListItem>
+                                        ))}
+                                    </List>
+                                )}
+                                <Divider />
+
                                 <TextField
                                     fullWidth
                                     label="Initial Note (optional)"

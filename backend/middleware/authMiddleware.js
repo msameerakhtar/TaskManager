@@ -13,9 +13,17 @@ const authMiddleware = (req, res, next) => {
         // Verify token
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
         
-        // Add user from payload to request object
-        req.user = decoded;
-        next();
+        // Find user to check suspension status
+        const User = require('../models/User');
+        User.findById(decoded.id).select('isSuspended').then(user => {
+            if (user && user.isSuspended) {
+                return res.status(403).json({ message: 'Your account has been suspended.' });
+            }
+            req.user = decoded;
+            next();
+        }).catch(err => {
+            res.status(500).json({ message: 'Server Error' });
+        });
     } catch (err) {
         res.status(401).json({ message: 'Token is not valid' });
     }

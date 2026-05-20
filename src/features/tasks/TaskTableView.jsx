@@ -5,6 +5,8 @@ import {
 } from '@mui/material';
 import EditIcon from '@mui/icons-material/Edit';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
+import LibraryAddCheckIcon from '@mui/icons-material/LibraryAddCheck';
+import LockIcon from '@mui/icons-material/Lock';
 import CustomLoader from '../../components/CustomLoader';
 import DeleteTask from './DeleteTask';
 
@@ -140,6 +142,7 @@ const TaskTableView = React.memo(({
           {sorted.map((task) => {
             const isHighlighted = highlightedTaskId === task.id;
             const overdue = isOverdue(task);
+            const isBlocked = task.blockedBy && task.blockedBy.some(t => t.status !== 'done');
             const statusCfg  = STATUS_CONFIG[task.status]  || STATUS_CONFIG.todo;
             const priorityCfg = PRIORITY_CONFIG[task.priority] || PRIORITY_CONFIG.medium;
             const dueDateStr = task.dueDate
@@ -202,11 +205,44 @@ const TaskTableView = React.memo(({
                     )}
                     {/* Extra chips */}
                     <Stack direction="row" spacing={0.5} mt={0.5} flexWrap="wrap">
+                      {task.labels && task.labels.length > 0 && task.labels.map((label, idx) => (
+                        <Chip 
+                          key={idx} 
+                          size="small" 
+                          label={label.text} 
+                          sx={{ 
+                            height: 16, 
+                            fontSize: '0.6rem', 
+                            fontWeight: 700, 
+                            bgcolor: label.color + '1A', 
+                            color: label.color,
+                            border: `1px solid ${label.color}40`
+                          }} 
+                        />
+                      ))}
                       {task.approvalStatus === 'pending' && (
                         <Chip size="small" color="warning" label="Approval pending" sx={{ height: 16, fontSize: '0.6rem' }} />
                       )}
                       {task.escalationLevel > 0 && (
                         <Chip size="small" color="error" variant="outlined" label={`SLA L${task.escalationLevel}`} sx={{ height: 16, fontSize: '0.6rem' }} />
+                      )}
+                      {isBlocked && (
+                        <Chip size="small" icon={<LockIcon sx={{ fontSize: '10px !important', ml: '4px' }} />} label="Blocked" color="error" variant="outlined" sx={{ height: 16, fontSize: '0.6rem', fontWeight: 700, '& .MuiChip-icon': { color: 'inherit' } }} />
+                      )}
+                      {task.subtasks && task.subtasks.length > 0 && (
+                        <Chip 
+                          size="small" 
+                          icon={<LibraryAddCheckIcon sx={{ fontSize: '10px !important', ml: '4px' }} />} 
+                          label={`${task.subtasks.filter(s => s.isCompleted).length}/${task.subtasks.length}`} 
+                          sx={{ 
+                            height: 16, 
+                            fontSize: '0.6rem', 
+                            fontWeight: 700, 
+                            bgcolor: task.subtasks.every(s => s.isCompleted) ? 'success.main' : 'action.selected', 
+                            color: task.subtasks.every(s => s.isCompleted) ? 'white' : 'text.primary',
+                            '& .MuiChip-icon': { color: 'inherit' }
+                          }} 
+                        />
                       )}
                     </Stack>
                   </Box>

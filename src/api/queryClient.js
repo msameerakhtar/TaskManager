@@ -5,7 +5,9 @@ export const queryClient = new QueryClient({
     queries: {
       refetchOnWindowFocus: false,
       retry: 1,
-      staleTime: 30 * 1000, // 30 seconds
+      staleTime: 5 * 60 * 1000, // 5 minutes (leveraging Socket.io dynamic invalidations!)
+      gcTime: 10 * 60 * 1000,    // 10 minutes garbage collection
+      cacheTime: 10 * 60 * 1000  // 10 minutes cache time (compatibility fallback)
     },
     mutations: {
       retry: 0,

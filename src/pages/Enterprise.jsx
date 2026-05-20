@@ -5,9 +5,12 @@ import {
   MenuItem, Alert, Chip, IconButton, Dialog, DialogTitle, DialogContent, DialogActions
 } from '@mui/material';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
-import { useSelector } from 'react-redux';
+import { io } from 'socket.io-client';
+import { API_BASE_URL } from '../api/axiosInstance';
+import { useSelector, useDispatch } from 'react-redux';
 import { projectApi } from '../api/projectApi';
 import { enterpriseApi } from '../api/enterpriseApi';
+import { setCurrentRole, setCurrentPermissions } from '../features/auth/authSlice';
 
 const tabProps = (index) => ({
   id: `enterprise-tab-${index}`,
@@ -16,6 +19,9 @@ const tabProps = (index) => ({
 
 const Enterprise = () => {
   const token = useSelector((state) => state.auth.token);
+  const user = useSelector((state) => state.auth.user);
+  const dispatch = useDispatch();
+  const currentPermissions = useSelector((state) => state.auth.currentPermissions || []);
 
   const [projects, setProjects] = useState([]);
   const [projectId, setProjectId] = useState('');
@@ -35,36 +41,76 @@ const Enterprise = () => {
   const [newKeyLabel, setNewKeyLabel] = useState('Automation export');
   const [revealedKey, setRevealedKey] = useState('');
 
+  // Workspace Settings State
+  const [renameText, setRenameText] = useState('');
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteRole, setInviteRole] = useState('member');
+
   // Comment Dialog State
   const [commentDialogOpen, setCommentDialogOpen] = useState(false);
   const [commentText, setCommentText] = useState('');
-  const [activeApproval, setActiveApproval] = useState({ id: null, type: null, title: '' });
+  const [activeApproval, setActiveApproval] = useState({ id: null, type: null, title: '', requestType: 'completion' });
+
+  const userId = useSelector((state) => state.auth.user?.id || state.auth.user?._id);
+  const roleForProject = useCallback((proj) => {
+    if (!proj || !userId) return null;
+    const uidStr = userId.toString();
+    if (proj.ownerId && (proj.ownerId._id || proj.ownerId).toString() === uidStr) return 'admin';
+    const m = proj.members?.find((mem) => (mem.userId?._id || mem.userId)?.toString() === uidStr);
+    return m?.role || null;
+  }, [userId]);
 
   const fetchProjects = useCallback(async () => {
     try {
       const { data } = await projectApi.getProjects();
       setProjects(data);
-      if (!projectId && data[0]?._id) setProjectId(data[0]._id);
+      if (!projectId && data.length > 0) {
+        // Try to select a project where user is admin first
+        const adminProject = data.find(p => roleForProject(p) === 'admin' || user?.systemRole === 'superadmin');
+        setProjectId(adminProject ? adminProject._id : data[0]._id);
+      }
     } catch (e) {
       console.error(e);
     }
-  }, [projectId]);
+  }, [projectId, roleForProject, user?.systemRole]);
 
   useEffect(() => {
     fetchProjects();
   }, [fetchProjects]);
 
-  const userId = useSelector((state) => state.auth.user?.id || state.auth.user?._id);
-  const roleForProject = useCallback((proj) => {
-    if (!proj?.members || !userId) return null;
-    const m = proj.members.find((mem) => (mem.userId?._id || mem.userId)?.toString() === userId.toString());
-    return m?.role || null;
-  }, [userId]);
-
   const admin = useMemo(
-    () => projectId ? roleForProject(projects.find((p) => p._id === projectId)) === 'admin' : false,
-    [projectId, projects, roleForProject]
+    () => {
+      if (user?.systemRole === 'superadmin') return true;
+      if (!projectId) return false;
+      const isOwnerOrAdmin = roleForProject(projects.find((p) => p._id === projectId)) === 'admin';
+      return isOwnerOrAdmin || currentPermissions.includes('enterprise:manage');
+    },
+    [projectId, projects, roleForProject, user?.systemRole, currentPermissions]
   );
+
+  useEffect(() => {
+    const fetchPerms = async () => {
+      if (projectId && projects.length > 0) {
+        const p = projects.find((x) => x._id === projectId);
+        if (p && userId) {
+          const mem = p.members.find(m => String(m.userId?._id || m.userId) === String(userId));
+          if (mem) {
+            dispatch(setCurrentRole(mem.role));
+          } else if (user?.systemRole === 'superadmin') {
+            dispatch(setCurrentRole('admin'));
+          }
+
+          try {
+            const { data } = await projectApi.getMyPermissions(projectId);
+            dispatch(setCurrentPermissions(data.permissions));
+          } catch (e) {
+            console.error('Failed to fetch workspace permissions:', e);
+          }
+        }
+      }
+    };
+    fetchPerms();
+  }, [projectId, projects, userId, dispatch, user?.systemRole]);
 
   useEffect(() => {
     const p = projects.find((x) => x._id === projectId);
@@ -89,6 +135,8 @@ const Enterprise = () => {
         emailAlertsToAdmins: !!ent.integrations?.emailAlertsToAdmins
       }
     });
+    
+    if (p) setRenameText(p.name);
   }, [projectId, projects]);
 
   const showMsg = useCallback((text, severity = 'success') => setMessage({ text, severity }), []);
@@ -156,6 +204,56 @@ const Enterprise = () => {
     if (tab === 4) loadApiKeys();
   }, [tab, projectId, admin, loadAudit, loadApprovals, loadApiKeys]);
 
+  useEffect(() => {
+    if (!token || !projectId) return;
+
+    const socketBaseUrl = API_BASE_URL.replace('/api', '');
+    const socket = io(socketBaseUrl, {
+      auth: { token },
+      transports: ['polling']
+    });
+
+    socket.emit('project:join', { projectId });
+
+    socket.on('task:changed', ({ projectId: pid }) => {
+      if (pid === projectId) {
+        if (tab === 1) loadAudit();
+        if (tab === 2) loadApprovals();
+      }
+    });
+
+    socket.on('project:updated', ({ projectId: pid }) => {
+      if (pid === projectId) {
+        fetchProjects();
+      }
+    });
+
+    return () => {
+      socket.emit('project:leave', { projectId });
+      socket.disconnect();
+    };
+  }, [token, projectId, tab, loadAudit, loadApprovals, fetchProjects]);
+
+  useEffect(() => {
+    const handleTaskChange = (e) => {
+      if (e.detail?.projectId === projectId) {
+        if (tab === 1) loadAudit();
+        if (tab === 2) loadApprovals();
+      }
+    };
+    const handleProjectUpdate = (e) => {
+      if (e.detail?.projectId === projectId) {
+        fetchProjects();
+      }
+    };
+    window.addEventListener('tm-socket-task-changed', handleTaskChange);
+    window.addEventListener('tm-socket-project-updated', handleProjectUpdate);
+    return () => {
+      window.removeEventListener('tm-socket-task-changed', handleTaskChange);
+      window.removeEventListener('tm-socket-project-updated', handleProjectUpdate);
+    };
+  }, [projectId, tab, loadAudit, loadApprovals, fetchProjects]);
+
   const handleConfirmApprovalAction = useCallback(async () => {
     if (!activeApproval.id) return;
     setLoading(true);
@@ -178,14 +276,14 @@ const Enterprise = () => {
     }
   }, [activeApproval, commentText, showMsg, broadcastTasksRefresh, loadApprovals]);
 
-  const openApproveDialog = (id, title) => {
-    setActiveApproval({ id, type: 'approve', title });
+  const openApproveDialog = (id, title, requestType) => {
+    setActiveApproval({ id, type: 'approve', title, requestType });
     setCommentText('');
     setCommentDialogOpen(true);
   };
 
-  const openRejectDialog = (id, title) => {
-    setActiveApproval({ id, type: 'reject', title });
+  const openRejectDialog = (id, title, requestType) => {
+    setActiveApproval({ id, type: 'reject', title, requestType });
     setCommentText('');
     setCommentDialogOpen(true);
   };
@@ -260,6 +358,72 @@ const Enterprise = () => {
     }
   }, [projectId, showMsg]);
 
+  const handleRenameProject = async () => {
+    if (!projectId || !admin || !renameText.trim()) return;
+    setLoading(true);
+    try {
+      await projectApi.renameProject(projectId, renameText);
+      showMsg('Workspace renamed.');
+      fetchProjects();
+    } catch (e) {
+      showMsg(e.response?.data?.message || 'Rename failed', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteProject = async () => {
+    if (!projectId || !admin) return;
+    if (!window.confirm('Are you SURE you want to delete this workspace and ALL its tasks? This cannot be undone.')) return;
+    setLoading(true);
+    try {
+      await projectApi.deleteProject(projectId);
+      showMsg('Workspace deleted.');
+      setProjectId('');
+      fetchProjects();
+    } catch (e) {
+      showMsg(e.response?.data?.message || 'Delete failed', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleUpdateRole = async (uid, newRole) => {
+    try {
+      await projectApi.updateMemberRole(projectId, uid, newRole);
+      showMsg('Role updated.');
+      fetchProjects();
+    } catch (e) {
+      showMsg(e.response?.data?.message || 'Update failed', 'error');
+    }
+  };
+
+  const handleRemoveMember = async (uid) => {
+    if (!window.confirm('Remove this member from the workspace?')) return;
+    try {
+      await projectApi.removeMember(projectId, uid);
+      showMsg('Member removed.');
+      fetchProjects();
+    } catch (e) {
+      showMsg(e.response?.data?.message || 'Remove failed', 'error');
+    }
+  };
+
+  const handleInviteMember = async () => {
+    if (!inviteEmail) return;
+    setLoading(true);
+    try {
+      await projectApi.inviteMember(projectId, inviteEmail, inviteRole);
+      showMsg('Member invited.');
+      setInviteEmail('');
+      fetchProjects();
+    } catch (e) {
+      showMsg(e.response?.data?.message || 'Invite failed', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>
       <Typography variant="h4" sx={{ fontWeight: 800, mb: 1 }}>Enterprise</Typography>
@@ -289,11 +453,21 @@ const Enterprise = () => {
         </Grid>
         <Grid item xs={12} md={6} sx={{ display: 'flex', alignItems: 'center' }}>
           {!admin && projectId && (
-            <Chip label="View only — admin features locked" color="warning" variant="outlined" />
+            <Chip label="Member Access — admin features locked" color="warning" variant="outlined" />
           )}
         </Grid>
       </Grid>
 
+      {!admin && projectId ? (
+        <Paper sx={{ p: 6, mt: 4, textAlign: 'center', borderRadius: 2 }}>
+          <Typography variant="h5" color="error" sx={{ mb: 1, fontWeight: 700 }}>Access Denied</Typography>
+          <Typography color="text.secondary">
+            Enterprise settings and audit logs are only available to Workspace Admins. 
+            You are currently a Member of this workspace. 
+            Please select another workspace where you have Admin access.
+          </Typography>
+        </Paper>
+      ) : (
       <Paper sx={{ borderRadius: 2 }}>
         <Tabs value={tab} onChange={(_, v) => setTab(v)} variant="scrollable" scrollButtons="auto">
           <Tab label="Policies & SLA" {...tabProps(0)} />
@@ -301,6 +475,7 @@ const Enterprise = () => {
           <Tab label="Approvals" {...tabProps(2)} />
           <Tab label="Exports" {...tabProps(3)} />
           <Tab label="API keys" {...tabProps(4)} />
+          <Tab label="Workspace" {...tabProps(5)} />
         </Tabs>
         <Divider />
 
@@ -429,13 +604,21 @@ const Enterprise = () => {
               {approvals.length === 0 && <Typography color="text.secondary">No pending approvals.</Typography>}
               {approvals.map((a) => (
                 <Paper key={a._id} variant="outlined" sx={{ p: 2 }}>
-                  <Typography fontWeight={700}>{a.taskId?.title || 'Task'}</Typography>
+                  <Stack direction="row" alignItems="center" spacing={1} mb={0.5}>
+                    <Typography fontWeight={700}>{a.taskId?.title || 'Task'}</Typography>
+                    <Chip 
+                      size="small" 
+                      label={a.type === 'deletion' ? 'Deletion Request' : 'Completion Request'} 
+                      color={a.type === 'deletion' ? 'error' : 'info'} 
+                      variant="outlined" 
+                    />
+                  </Stack>
                   <Typography variant="caption" color="text.secondary">
                     Requested by {a.requestedBy?.fullName || a.requestedBy?.email}
                   </Typography>
                   <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
-                    <Button size="small" variant="contained" color="success" onClick={() => openApproveDialog(a._id, a.taskId?.title)}>Approve</Button>
-                    <Button size="small" variant="outlined" color="warning" onClick={() => openRejectDialog(a._id, a.taskId?.title)}>Reject</Button>
+                    <Button size="small" variant="contained" color="success" onClick={() => openApproveDialog(a._id, a.taskId?.title, a.type)}>Approve</Button>
+                    <Button size="small" variant="outlined" color="warning" onClick={() => openRejectDialog(a._id, a.taskId?.title, a.type)}>Reject</Button>
                   </Stack>
                 </Paper>
               ))}
@@ -517,18 +700,122 @@ const Enterprise = () => {
           )}
           {tab === 4 && !admin && <Typography color="text.secondary">Admins only.</Typography>}
         </Box>
+
+        <Box role="tabpanel" hidden={tab !== 5} sx={{ p: 2 }}>
+          {tab === 5 && (
+            <Stack spacing={4}>
+              <Box>
+                <Typography variant="h6" sx={{ mb: 2 }}>Rename Workspace</Typography>
+                <Stack direction="row" spacing={1} alignItems="center">
+                  <TextField 
+                    size="small" 
+                    value={renameText} 
+                    onChange={(e) => setRenameText(e.target.value)} 
+                    disabled={!admin || loading}
+                    sx={{ maxWidth: 300 }}
+                  />
+                  <Button variant="contained" onClick={handleRenameProject} disabled={!admin || loading}>Rename</Button>
+                </Stack>
+              </Box>
+
+              <Box>
+                <Typography variant="h6" sx={{ mb: 2 }}>Members</Typography>
+                {admin && (
+                  <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ mb: 2 }}>
+                    <TextField 
+                      size="small" 
+                      placeholder="Email address" 
+                      value={inviteEmail} 
+                      onChange={(e) => setInviteEmail(e.target.value)} 
+                    />
+                    <TextField 
+                      size="small" 
+                      select 
+                      value={inviteRole} 
+                      onChange={(e) => setInviteRole(e.target.value)}
+                    >
+                      <MenuItem value="member">Member</MenuItem>
+                      <MenuItem value="admin">Admin</MenuItem>
+                    </TextField>
+                    <Button variant="contained" onClick={handleInviteMember} disabled={loading || !inviteEmail}>Invite</Button>
+                  </Stack>
+                )}
+                
+                <Paper variant="outlined">
+                  <Table size="small">
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>User</TableCell>
+                        <TableCell>Email</TableCell>
+                        <TableCell>Role</TableCell>
+                        <TableCell align="right">Actions</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {projects.find(p => p._id === projectId)?.members.map((m) => (
+                        <TableRow key={m.userId?._id || m.userId}>
+                          <TableCell>{m.userId?.fullName || 'Unknown'}</TableCell>
+                          <TableCell>{m.userId?.email || '—'}</TableCell>
+                          <TableCell>
+                            {admin && String(projects.find(p => p._id === projectId)?.ownerId) !== String(m.userId?._id || m.userId) ? (
+                              <TextField
+                                select
+                                size="small"
+                                value={m.role}
+                                onChange={(e) => handleUpdateRole(m.userId?._id || m.userId, e.target.value)}
+                                sx={{ minWidth: 100 }}
+                              >
+                                <MenuItem value="member">Member</MenuItem>
+                                <MenuItem value="admin">Admin</MenuItem>
+                              </TextField>
+                            ) : (
+                              <Chip label={m.role} size="small" color={m.role === 'admin' ? 'primary' : 'default'} />
+                            )}
+                          </TableCell>
+                          <TableCell align="right">
+                            {admin && String(projects.find(p => p._id === projectId)?.ownerId) !== String(m.userId?._id || m.userId) && (
+                              <Button size="small" color="error" onClick={() => handleRemoveMember(m.userId?._id || m.userId)}>Remove</Button>
+                            )}
+                            {String(projects.find(p => p._id === projectId)?.ownerId) === String(m.userId?._id || m.userId) && (
+                              <Typography variant="caption" color="text.secondary">Owner</Typography>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </Paper>
+              </Box>
+
+              <Divider />
+              
+              {admin && (
+                <Box>
+                  <Typography variant="h6" color="error" sx={{ mb: 1 }}>Danger Zone</Typography>
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                    Deleting a workspace will permanently remove all tasks, approvals, and logs associated with it.
+                  </Typography>
+                  <Button variant="contained" color="error" onClick={handleDeleteProject} disabled={loading}>
+                    Delete Workspace
+                  </Button>
+                </Box>
+              )}
+            </Stack>
+          )}
+        </Box>
       </Paper>
+      )}
 
       {/* Comment Dialog */}
       <Dialog open={commentDialogOpen} onClose={() => !loading && setCommentDialogOpen(false)} fullWidth maxWidth="xs">
         <DialogTitle sx={{ fontWeight: 700 }}>
-          {activeApproval.type === 'approve' ? 'Approve Task' : 'Reject Task'}
+          {activeApproval.type === 'approve' ? `Approve ${activeApproval.requestType === 'deletion' ? 'Deletion' : 'Task'}` : `Reject ${activeApproval.requestType === 'deletion' ? 'Deletion' : 'Task'}`}
         </DialogTitle>
         <DialogContent>
           <Typography variant="body2" sx={{ mb: 2 }}>
             {activeApproval.type === 'approve'
-              ? `Are you sure you want to approve "${activeApproval.title}"?`
-              : `Are you sure you want to reject "${activeApproval.title}"?`}
+              ? `Are you sure you want to approve ${activeApproval.requestType === 'deletion' ? 'the deletion of' : ''} "${activeApproval.title}"?`
+              : `Are you sure you want to reject ${activeApproval.requestType === 'deletion' ? 'the deletion of' : ''} "${activeApproval.title}"?`}
           </Typography>
           <TextField
             fullWidth

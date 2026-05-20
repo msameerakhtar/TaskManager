@@ -2,6 +2,7 @@ const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const ApiKey = require('../models/ApiKey');
 const Project = require('../models/Project');
+const User = require('../models/User');
 const { isProjectMember } = require('../utils/projectAccess');
 
 const hashKey = (raw) => crypto.createHash('sha256').update(raw, 'utf8').digest('hex');
@@ -39,7 +40,15 @@ const exportAuth = async (req, res, next) => {
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
         req.user = decoded;
         const project = await Project.findById(projectId);
-        if (!project || !isProjectMember(project, decoded.id)) {
+        if (!project) {
+            return res.status(404).json({ message: 'Project not found.' });
+        }
+
+        // Super Admin bypasses project membership requirement
+        const userRecord = await User.findById(decoded.id).lean();
+        const isSuper = userRecord && userRecord.systemRole === 'superadmin';
+
+        if (!isSuper && !isProjectMember(project, decoded.id)) {
             return res.status(403).json({ message: 'Not authorized for this project.' });
         }
         req.exportContext = { projectId, userId: decoded.id, fromApiKey: false };

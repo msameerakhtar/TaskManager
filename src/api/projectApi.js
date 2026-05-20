@@ -10,6 +10,18 @@ export const projectApi = {
   inviteMember: (projectId, email, role) =>
     api.post(`/projects/${projectId}/members`, { email, role }),
 
+  updateMemberRole: (projectId, userId, role) =>
+    api.patch(`/projects/${projectId}/members/${userId}`, { role }),
+
+  removeMember: (projectId, userId) =>
+    api.delete(`/projects/${projectId}/members/${userId}`),
+
+  renameProject: (projectId, name) =>
+    api.patch(`/projects/${projectId}`, { name }),
+
+  deleteProject: (projectId) =>
+    api.delete(`/projects/${projectId}`),
+
   updateEnterprise: (projectId, enterprise) =>
     api.patch(`/projects/${projectId}/enterprise`, { enterprise }),
 
@@ -27,4 +39,7 @@ export const projectApi = {
 
   testEmail: (projectId) =>
     api.post(`/projects/${projectId}/integrations/test-email`),
+
+  getMyPermissions: (projectId) =>
+    api.get(`/projects/${projectId}/my-permissions`),
 };

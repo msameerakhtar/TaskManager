@@ -60,6 +60,14 @@ const taskSchema = new mongoose.Schema({
             default: undefined
         }
     },
+    blockedBy: [{
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Task'
+    }],
+    labels: [{
+        text: { type: String, required: true },
+        color: { type: String, default: '#e0e0e0' }
+    }],
     notes: [{
         content: {
             type: String,
@@ -81,6 +89,21 @@ const taskSchema = new mongoose.Schema({
             type: String,
             required: true,
             trim: true
+        },
+        createdAt: {
+            type: Date,
+            default: Date.now
+        }
+    }],
+    subtasks: [{
+        title: {
+            type: String,
+            required: true,
+            trim: true
+        },
+        isCompleted: {
+            type: Boolean,
+            default: false
         },
         createdAt: {
             type: Date,
@@ -128,6 +151,11 @@ const taskSchema = new mongoose.Schema({
         enum: ['none', 'pending', 'approved', 'rejected'],
         default: 'none'
     },
+    deletionStatus: {
+        type: String,
+        enum: ['none', 'pending', 'rejected'],
+        default: 'none'
+    },
     slaBreachedAt: {
         type: Date,
         default: null
@@ -144,8 +172,13 @@ const taskSchema = new mongoose.Schema({
     }
 }, { timestamps: true });
 
+// Performance Optimization Indexes
 taskSchema.index({ userId: 1, status: 1, dueDate: 1 });
 taskSchema.index({ userId: 1, createdAt: -1 });
 taskSchema.index({ projectId: 1, status: 1, dueDate: 1 });
+taskSchema.index({ assigneeId: 1 });
+taskSchema.index({ projectId: 1 });
+taskSchema.index({ status: 1 });
+taskSchema.index({ dueDate: 1 });
 
 module.exports = mongoose.model('Task', taskSchema);

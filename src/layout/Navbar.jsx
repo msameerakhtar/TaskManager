@@ -23,6 +23,9 @@ import { useDispatch, useSelector } from 'react-redux';
 import { logout } from '../features/auth/authSlice';
 import { notificationApi } from '../api/notificationApi';
 import ProfileUpdateModal from '../features/auth/ProfileUpdateModal';
+import { io } from 'socket.io-client';
+import { API_BASE_URL } from '../api/axiosInstance';
+import { getOptimizedImageUrl } from '../utils/imageHelper';
 
 const Navbar = ({ mode, toggleTheme }) => {
     const navigate = useNavigate();
@@ -45,16 +48,39 @@ const Navbar = ({ mode, toggleTheme }) => {
 
     const isHomePage = location.pathname === '/';
     
+    const currentRole = useSelector((state) => state.auth.currentRole);
+    const currentPermissions = useSelector((state) => state.auth.currentPermissions || []);
+    
     const fullName = useMemo(() => user?.fullName || user?.email?.split('@')[0] || "User", [user]);
-    const avatarUrl = useMemo(() => user?.avatarUrl, [user]);
+    const avatarUrl = useMemo(() => getOptimizedImageUrl(user?.avatarUrl, { width: 100, height: 100 }), [user]);
 
-    const navItems = useMemo(() => [
-        { label: 'Home', path: '/tasks' },
-        { label: 'Enterprise', path: '/enterprise' },
-        { label: 'Profile', path: '/profile' },
-        { label: 'Contact Us', path: '/contact' },
-        { label: 'Blog', path: '/blog' },
-    ], []);
+    const navItems = useMemo(() => {
+        const items = [
+            { label: 'Home', path: '/tasks' }
+        ];
+
+        // 1. If Super Admin: Only show Super Admin Dashboard (Hide others)
+        if (user?.systemRole === 'superadmin') {
+            items.push({ label: 'Super Admin', path: '/superadmin' });
+        } 
+        // 2. If Normal User: Show Dashboard based on Current Workspace Role
+        else {
+            if (currentRole === 'admin') {
+                items.push({ label: 'Admin Dashboard', path: '/admin-dashboard' });
+            } else if (currentRole === 'member') {
+                items.push({ label: 'My Dashboard', path: '/member-dashboard' });
+            }
+
+            if (currentRole === 'admin' || currentPermissions.includes('enterprise:manage')) {
+                items.push({ label: 'Enterprise', path: '/enterprise' });
+            }
+        }
+
+        items.push({ label: 'Profile', path: '/profile' });
+        items.push({ label: 'Contact Us', path: '/contact' });
+        items.push({ label: 'Blog', path: '/blog' });
+        return items;
+    }, [currentRole, currentPermissions, user?.systemRole]);
 
     const handleLogoutClick = useCallback(() => {
         setAnchorEl(null);
@@ -133,6 +159,25 @@ const Navbar = ({ mode, toggleTheme }) => {
             fetchNotifications(1, false);
         }
     }, [token, user, fetchNotifications]);
+
+    // ── Real-time notification socket ──────────────────────────────────────
+    useEffect(() => {
+        if (!token || !user) return;
+        const socketBaseUrl = API_BASE_URL.replace('/api', '');
+        const socket = io(socketBaseUrl, {
+            auth: { token },
+            transports: ['polling']
+        });
+        socket.on('notification:new', () => {
+            // Increment badge count immediately, then refresh the full list
+            setUnreadCount((prev) => prev + 1);
+            fetchNotifications(1, false);
+        });
+        return () => {
+            socket.disconnect();
+        };
+    }, [token, user, fetchNotifications]);
+    // ────────────────────────────────────────────────────────────────────────
 
     const handleOpenNotifications = useCallback(async (event) => {
         setNotificationAnchorEl(event.currentTarget);
@@ -402,6 +447,7 @@ const Navbar = ({ mode, toggleTheme }) => {
                                 </Menu>
                                 <IconButton onClick={(e) => setAnchorEl(e.currentTarget)} sx={{ p: 0.5 }}>
                                     <Avatar 
+                                        key={avatarUrl || 'no-avatar'}
                                         src={avatarUrl}
                                         alt={fullName}
                                         sx={{ 

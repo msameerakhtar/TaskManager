@@ -30,7 +30,20 @@ const DeleteTask = ({ taskId, onDeleteSuccess }) => {
         setLoading(true);
         
         try {
-            await taskApi.deleteTask(taskId);
+            const { data } = await taskApi.deleteTask(taskId);
+
+            if (data?.requiresApproval) {
+                setFeedback({
+                    open: true,
+                    message: data.message || "Deletion sent for admin approval. Task stays active until approved.",
+                    severity: 'info'
+                });
+                setTimeout(() => {
+                    onDeleteSuccess();
+                }, 2000);
+                return;
+            }
+
             setFeedback({
                 open: true,
                 message: "Task deleted successfully!",
@@ -42,7 +55,7 @@ const DeleteTask = ({ taskId, onDeleteSuccess }) => {
         } catch (error) {
             setFeedback({
                 open: true,
-                message: "Failed to delete task. Please try again.",
+                message: error.response?.data?.message || "Failed to delete task. Please try again.",
                 severity: 'error'
             });
         } finally {

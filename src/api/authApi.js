@@ -17,4 +17,10 @@ export const authApi = {
 
   changePassword: (data) =>
     api.put('/auth/change-password', data),
+
+  verifyOtp: (data) =>
+    api.post('/auth/verify-otp', data, { _skipAuthRedirect: true }),
+
+  resendOtp: (data) =>
+    api.post('/auth/resend-otp', data, { _skipAuthRedirect: true }),
 };
