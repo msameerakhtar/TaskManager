@@ -193,21 +193,10 @@ mongoose.connect(process.env.MONGODB_URI, {
     .catch(err => console.error('❌ MongoDB Connection Error:', err.message));
 
 const PORT = process.env.PORT || 5000;
-const server = httpServer.listen(PORT, () => {
-    console.log(`Server is running on port ${PORT}`);
-});
-
-const shutdown = async () => {
-    console.log('Shutting down server gracefully...');
-    server.close(async () => {
-        try {
-            io.close();
-            await mongoose.connection.close(false);
-        } finally {
-            process.exit(0);
-        }
+if (process.env.NODE_ENV !== 'production' || !process.env.VERCEL) {
+    httpServer.listen(PORT, () => {
+        console.log(`Server is running on port ${PORT}`);
     });
-};
+}
 
-process.on('SIGINT', shutdown);
-process.on('SIGTERM', shutdown);
+module.exports = app;
